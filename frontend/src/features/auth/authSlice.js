@@ -10,6 +10,13 @@ export const loginUser = createAsyncThunk(
       localStorage.setItem('hirelens_refresh_token', tokens.refresh_token)
 
       const user = await authService.getMe()
+      if (credentials.role && user.role !== credentials.role) {
+        localStorage.removeItem('hirelens_token')
+        localStorage.removeItem('hirelens_refresh_token')
+        return rejectWithValue(
+          `This account is registered as ${user.role}. Switch "Login as" to ${user.role}.`
+        )
+      }
       localStorage.setItem('hirelens_user', JSON.stringify(user))
 
       return {
@@ -19,7 +26,15 @@ export const loginUser = createAsyncThunk(
         role: user.role,
       }
     } catch (error) {
-      return rejectWithValue(error.response?.data?.detail || 'Login failed')
+      const detail = error.response?.data?.detail
+      let message = 'Login failed'
+      if (typeof detail === 'string') message = detail
+      else if (Array.isArray(detail)) message = detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
+      else if (error.message === 'Network Error') {
+        message =
+          'Cannot reach the API. Keep your PC backend and Cloudflare tunnel running, then check Vercel VITE_API_BASE_URL.'
+      }
+      return rejectWithValue(message)
     }
   }
 )
