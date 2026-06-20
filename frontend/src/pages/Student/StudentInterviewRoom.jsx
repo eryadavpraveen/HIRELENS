@@ -299,7 +299,9 @@ export default function StudentInterviewRoom() {
           <VideoStream self={cameraOn} stream={localStream} label="Your Camera" />
           <Card className="text-center">
             <p className="text-sm text-muted-foreground">
-              You are connected. Stay focused — your interview is being securely monitored.
+              {peerConnected
+                ? 'You are connected. Stay focused — your interview is being securely monitored.'
+                : 'Waiting for recruiter to connect. Keep this page open.'}
             </p>
           </Card>
         </div>

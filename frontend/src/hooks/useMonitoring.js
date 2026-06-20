@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { rtcLog, rtcWarn } from '../utils/rtcLog'
 import monitoringService from '../services/monitoringService'
 import violationService from '../services/violationService'
 import { recordAudioFromStream } from '../services/audioRecorder'
@@ -68,6 +69,7 @@ export function useMonitoring({ interviewId, localStream, active, sendMessage, c
         }
       }
       if (Object.keys(changed).length > 0) {
+        rtcLog('monitoring', 'status-update push', changed)
         sendMessage?.({ type: 'status-update', statuses: changed })
       }
     },
@@ -94,10 +96,31 @@ export function useMonitoring({ interviewId, localStream, active, sendMessage, c
       voice: false,
     }
 
+    async function waitForVideoFrame() {
+      if (video.videoWidth > 0 && video.videoHeight > 0) return true
+      return new Promise((resolve) => {
+        const check = () => video.videoWidth > 0 && video.videoHeight > 0
+        if (check()) {
+          resolve(true)
+          return
+        }
+        const onReady = () => {
+          if (check()) resolve(true)
+        }
+        video.addEventListener('loadeddata', onReady, { once: true })
+        video.addEventListener('resize', onReady, { once: true })
+        setTimeout(() => resolve(check()), 2500)
+      })
+    }
+
     async function grabFrame() {
+      const ready = await waitForVideoFrame()
+      if (!ready) {
+        rtcWarn('monitoring', 'grabFrame skipped — video has no dimensions yet')
+        return null
+      }
       const w = video.videoWidth
       const h = video.videoHeight
-      if (!w || !h) return null
       canvas.width = w
       canvas.height = h
       const ctx = canvas.getContext('2d')
@@ -116,7 +139,7 @@ export function useMonitoring({ interviewId, localStream, active, sendMessage, c
         if (stopped || !result) return
 
         if (result.face_detected === false) {
-          pushStatus({ attention: 'ATTENTION_LOSS' })
+          pushStatus({ attention: 'ATTENTION_LOSS', mouth: 'MOUTH_CLOSED', lipsync: 'LIP_SYNC_OK' })
         } else {
           ;(result.reasons || []).forEach((r) => {
             if (r.startsWith('HEAD') || r.startsWith('EYE') || r === 'EYES_CLOSED') report(r)
@@ -204,12 +227,16 @@ export function useMonitoring({ interviewId, localStream, active, sendMessage, c
         const d = await monitoringService.verifyIdentity(frame, candidateId || DEMO_STUDENT_ID)
         if (stopped || d === undefined) return
 
-        const verified = typeof d === 'boolean' ? d : d.verified
+        const verified = typeof d === 'boolean' ? d : d?.verified
         if (verified === false) {
           report('IDENTITY_MISMATCH')
           pushStatus({ identity: 'IDENTITY_MISMATCH' })
         } else if (verified === true) {
           pushStatus({ identity: 'VERIFIED' })
+        } else if (d?.status === 'NOT_REGISTERED') {
+          pushStatus({ identity: 'NOT_REGISTERED' })
+        } else {
+          rtcWarn('monitoring', 'identity verify ambiguous response', d)
         }
       } catch {
         /* ignore */

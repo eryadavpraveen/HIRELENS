@@ -1,4 +1,5 @@
 import { WS_BASE_URL } from '../utils/constants'
+import { rtcLog } from '../utils/rtcLog'
 
 /**
  * WebRTC configuration + small helpers shared by the interview rooms.
@@ -9,7 +10,6 @@ export const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // Public TURN relay — required when student and recruiter are on different networks.
     {
       urls: 'turn:openrelay.metered.ca:80',
       username: 'openrelayproject',
@@ -34,10 +34,10 @@ export async function getLocalMedia() {
   return navigator.mediaDevices.getUserMedia({ video: true, audio: true })
 }
 
-/** Build the signaling WebSocket URL for an interview room + role. */
+/** Build the signaling WebSocket URL (role only — token sent after connect). */
 export function signalingUrl(interviewId, role) {
   const params = new URLSearchParams({ role })
-  const token = localStorage.getItem('hirelens_token')
-  if (token) params.set('token', token)
-  return `${WS_BASE_URL}/ws/interview/${interviewId}?${params.toString()}`
+  const url = `${WS_BASE_URL}/ws/interview/${interviewId}?${params.toString()}`
+  rtcLog(role, 'signaling URL built', { url, interviewId })
+  return url
 }

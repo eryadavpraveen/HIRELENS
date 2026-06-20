@@ -23,7 +23,7 @@ function redirectToLogin() {
   }
 }
 
-async function refreshAccessToken() {
+export async function refreshAccessToken() {
   const refreshToken = localStorage.getItem('hirelens_refresh_token')
   if (!refreshToken) {
     throw new Error('No refresh token')
@@ -36,6 +36,29 @@ async function refreshAccessToken() {
   localStorage.setItem('hirelens_token', data.access_token)
   localStorage.setItem('hirelens_refresh_token', data.refresh_token)
   return data.access_token
+}
+
+/** Return a non-expired access token, refreshing proactively when needed. */
+export async function getValidAccessToken() {
+  const token = localStorage.getItem('hirelens_token')
+  if (!token) return null
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    const expMs = payload.exp * 1000
+    if (Date.now() >= expMs - 60_000) {
+      return await refreshAccessToken()
+    }
+  } catch {
+    /* malformed token — try refresh */
+    try {
+      return await refreshAccessToken()
+    } catch {
+      return token
+    }
+  }
+
+  return token
 }
 
 api.interceptors.request.use(
