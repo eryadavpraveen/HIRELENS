@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="HIRELENS">
+  <rect width="32" height="32" rx="8" fill="#0F172A"/>
+  <rect x="4" y="4" width="24" height="24" rx="6" fill="#2563EB" opacity="0.22"/>
+  <path
+    fill="none"
+    stroke="#2563EB"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    d="M7.5 16c2.2-3.6 4.8-3.6 8.5-3.6s6.3 0 8.5 3.6c-2.2 3.6-4.8 3.6-8.5 3.6s-6.3 0-8.5-3.6z"
+  />
+  <circle cx="16" cy="16" r="2.5" fill="#38BDF8"/>
+</svg>

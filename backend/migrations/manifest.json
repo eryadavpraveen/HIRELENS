@@ -1,0 +1,32 @@
+{
+  "001_add_interviews_completed_at": {
+    "description": "Add interviews.completed_at for interview completion locking",
+    "changes": [
+      {
+        "table": "interviews",
+        "column": "completed_at",
+        "action": "add"
+      }
+    ]
+  },
+  "002_phase2_security_tables": {
+    "description": "Phase 2 security: refresh_tokens, password_reset_tokens, voiceprints",
+    "changes": [
+      {
+        "table": "refresh_tokens",
+        "column": "id",
+        "action": "add"
+      },
+      {
+        "table": "password_reset_tokens",
+        "column": "id",
+        "action": "add"
+      },
+      {
+        "table": "voiceprints",
+        "column": "id",
+        "action": "add"
+      }
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+# Render Blueprint — free tier (services sleep when idle; ML may be tight on RAM).
+# Dashboard: New > Blueprint > connect repo > path: deploy/render.yaml
+#
+# After deploy, set frontend env on Vercel to these Render URLs.
+
+services:
+  - type: web
+    name: hirelens-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:$PORT
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: FRONTEND_URL
+        sync: false
+      - key: ATTENTION_SERVICE_URL
+        fromService:
+          name: hirelens-attention
+          type: web
+          property: host
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: hirelens-attention
+    runtime: python
+    rootDir: attention_service
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        fromService:
+          name: hirelens-api
+          type: web
+          envVarKey: SECRET_KEY
+      - key: ALGORITHM
+        value: HS256
+      - key: CORS_ORIGINS
+        sync: false

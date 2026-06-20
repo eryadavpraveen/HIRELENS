@@ -1,0 +1,37 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+!**/.env.example
+!**/.env.production.example
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+mediapipe_env/
+interviewai_env/
+*.egg
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Uploads & local data
+backend/uploads/
+*.pyc
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Cursor
+.cursor/
