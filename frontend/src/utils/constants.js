@@ -2,7 +2,8 @@
 function normalizeBaseUrl(raw, fallback) {
   if (!raw || typeof raw !== 'string') return fallback
   const trimmed = raw.trim().replace(/\\/g, '/')
-  const match = trimmed.match(/https?:\/\/[^\s"'`]+/i)
+  const fixed = trimmed.replace(/(https?):\/([^/])/i, '$1://$2')
+  const match = fixed.match(/https?:\/\/[^\s"'`,]+/i)
   if (match) return match[0].replace(/\/$/, '')
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed.replace(/\/$/, '')
@@ -13,7 +14,8 @@ function normalizeBaseUrl(raw, fallback) {
 function normalizeWsUrl(raw, fallback) {
   if (!raw || typeof raw !== 'string') return fallback
   const trimmed = raw.trim().replace(/\\/g, '/')
-  const match = trimmed.match(/wss?:\/\/[^\s"'`]+/i)
+  const fixed = trimmed.replace(/(wss?):\/([^/])/i, '$1://$2')
+  const match = fixed.match(/wss?:\/\/[^\s"'`,]+/i)
   if (match) return match[0].replace(/\/$/, '')
   if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
     return trimmed.replace(/\/$/, '')
