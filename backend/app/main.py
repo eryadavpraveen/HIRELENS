@@ -23,6 +23,7 @@ from app.api.cv import router as cv_router
 from app.api.identity import router as identity_router
 from app.api.object_detection import router as object_router
 from app.api.signaling import router as signaling_router
+from app.api.attention_proxy import router as attention_proxy_router
 from app.cors import build_cors_config
 
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +68,7 @@ app.include_router(interview_router, prefix="/interviews", tags=["Interviews"])
 app.include_router(violation_router, prefix="/violations", tags=["Violations"])
 app.include_router(report_router, prefix="/reports", tags=["Reports"])
 app.include_router(candidate_router, prefix="/candidates", tags=["Candidates"])
+app.include_router(attention_proxy_router, tags=["Attention Proxy"])
 app.include_router(signaling_router, tags=["Signaling"])
 
 

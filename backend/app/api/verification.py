@@ -5,7 +5,7 @@ import re
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.auth.dependencies import require_student, ensure_student_participant
+from app.auth.dependencies import require_student, get_or_create_student_participant
 from app.models.user import User
 
 router = APIRouter()
@@ -26,7 +26,7 @@ async def upload_verification_photo(
     current_user: User = Depends(require_student),
     db: Session = Depends(get_db),
 ):
-    ensure_student_participant(db, candidate_id, current_user)
+    get_or_create_student_participant(db, candidate_id, current_user)
 
     filename = f"{safe_candidate_id(candidate_id)}.jpg"
     filepath = os.path.join(UPLOAD_DIR, filename)

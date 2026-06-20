@@ -35,7 +35,7 @@ def authorize_student_voice(candidate_id: str, authorization: str | None) -> Non
             text(
                 """
                 SELECT 1 FROM participants
-                WHERE interview_id = :interview_id AND student_id = :student_id
+                WHERE interview_id::text = :interview_id AND student_id::text = :student_id
                 """
             ),
             {"interview_id": candidate_id, "student_id": user_id},

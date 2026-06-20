@@ -133,12 +133,19 @@ export default function VerificationPage() {
 
       setDone(true)
     } catch (err) {
+      const detail = err?.response?.data?.detail
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d.msg || d).join(', ')
+            : err.message || 'Verification failed. Please try again.'
       if (IS_MOCK) {
         // Mock fallback: allow the demo to proceed even without the backend.
         setVerificationStep(id, { photo: true, voice: true })
         setDone(true)
       } else {
-        setError(err?.response?.data?.detail || err.message || 'Verification failed. Please try again.')
+        setError(message)
       }
     } finally {
       setSubmitting(false)
