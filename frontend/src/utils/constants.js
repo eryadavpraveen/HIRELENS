@@ -1,6 +1,38 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-export const ATTENTION_SERVICE_URL = import.meta.env.VITE_ATTENTION_SERVICE_URL || 'http://localhost:8001'
-export const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://127.0.0.1:8000'
+/** Strip accidental path prefixes when env vars are pasted from local files. */
+function normalizeBaseUrl(raw, fallback) {
+  if (!raw || typeof raw !== 'string') return fallback
+  const trimmed = raw.trim().replace(/\\/g, '/')
+  const match = trimmed.match(/https?:\/\/[^\s"'`]+/i)
+  if (match) return match[0].replace(/\/$/, '')
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed.replace(/\/$/, '')
+  }
+  return fallback
+}
+
+function normalizeWsUrl(raw, fallback) {
+  if (!raw || typeof raw !== 'string') return fallback
+  const trimmed = raw.trim().replace(/\\/g, '/')
+  const match = trimmed.match(/wss?:\/\/[^\s"'`]+/i)
+  if (match) return match[0].replace(/\/$/, '')
+  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
+    return trimmed.replace(/\/$/, '')
+  }
+  return fallback
+}
+
+export const API_BASE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_API_BASE_URL,
+  'http://127.0.0.1:8000'
+)
+export const ATTENTION_SERVICE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_ATTENTION_SERVICE_URL,
+  'http://localhost:8001'
+)
+export const WS_BASE_URL = normalizeWsUrl(
+  import.meta.env.VITE_WS_BASE_URL,
+  'ws://127.0.0.1:8000'
+)
 
 export const ROLES = {
   STUDENT: 'student',

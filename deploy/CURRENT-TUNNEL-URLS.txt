@@ -1,0 +1,21 @@
+# Generated 2026-06-20 — Cloudflare quick tunnels (change when you restart tunnels)
+# Keep PC on + cloudflared running while using the app.
+
+API (backend :8000):
+https://toe-greatly-jeans-collectibles.trycloudflare.com
+
+Attention (:8001):
+https://objects-larry-reports-mortgages.trycloudflare.com
+
+Vercel Environment Variables (Settings → Environment Variables → Production):
+# IMPORTANT: paste ONLY the URL — no Windows paths or file paths!
+VITE_API_BASE_URL=https://toe-greatly-jeans-collectibles.trycloudflare.com
+VITE_ATTENTION_SERVICE_URL=https://objects-larry-reports-mortgages.trycloudflare.com
+VITE_WS_BASE_URL=wss://toe-greatly-jeans-collectibles.trycloudflare.com
+VITE_USE_MOCK=false
+
+backend/.env (on your PC):
+FRONTEND_URL=https://hirelens-puce-two.vercel.app
+ATTENTION_SERVICE_URL=http://127.0.0.1:8001
+
+After saving Vercel env vars: Deployments → Redeploy (without cache).
