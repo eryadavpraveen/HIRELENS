@@ -109,8 +109,25 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       return pc
     }
 
-    async function createOffer() {
-      if (initiated || !localStreamLocal) return
+    function resetPeer() {
+      if (pc) {
+        pc.close()
+        pc = null
+      }
+      initiated = false
+      pendingCandidates.length = 0
+      if (!cancelled) {
+        setRemoteStream(null)
+        setPeerConnected(false)
+      }
+    }
+
+    async function createOffer({ force = false } = {}) {
+      if (!localStreamLocal) return
+      if (initiated && !force) return
+
+      if (force) resetPeer()
+
       initiated = true
       const peer = ensurePeer()
       const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
@@ -118,9 +135,9 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       send({ type: 'offer', sdp: peer.localDescription })
     }
 
-    function maybeInitiate() {
+    function maybeInitiate(force = false) {
       if (role !== 'recruiter') return
-      if (localStreamLocal) createOffer()
+      if (localStreamLocal) createOffer({ force })
       else wantInitiate = true
     }
 
@@ -138,10 +155,19 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
     async function handle(msg) {
       switch (msg.type) {
         case 'room-joined':
-          if (role === 'recruiter' && (msg.participants || []).includes('student')) maybeInitiate()
+          if (role === 'recruiter' && (msg.participants || []).includes('student')) maybeInitiate(true)
+          if (role === 'student' && (msg.participants || []).includes('recruiter')) {
+            send({ type: 'request-offer' })
+          }
           break
         case 'peer-joined':
-          if (role === 'recruiter' && msg.role === 'student') maybeInitiate()
+          if (role === 'recruiter' && msg.role === 'student') maybeInitiate(true)
+          if (role === 'student' && msg.role === 'recruiter') {
+            send({ type: 'request-offer' })
+          }
+          break
+        case 'request-offer':
+          if (role === 'recruiter') maybeInitiate(true)
           break
         case 'offer': {
           const peer = ensurePeer()
@@ -252,7 +278,7 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
         localStreamRef.current = stream
         setLocalStream(stream)
         if (pc) stream.getTracks().forEach((t) => pc.addTrack(t, stream))
-        if (wantInitiate) createOffer()
+        if (wantInitiate) createOffer({ force: true })
       })
       .catch((err) => console.warn('[useWebRTC] getUserMedia failed:', err?.message))
 

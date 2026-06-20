@@ -144,6 +144,7 @@ RELAY_TYPES = {
     "ice-candidate",
     "monitoring-event",
     "status-update",
+    "request-offer",
 }
 
 
@@ -170,6 +171,16 @@ def _authorize_websocket(db, interview: Interview, role: str, token: str) -> boo
         )
         .first()
     )
+    if not participant:
+        from sqlalchemy import cast, String
+        participant = (
+            db.query(Participant)
+            .filter(
+                cast(Participant.interview_id, String) == str(interview.id),
+                cast(Participant.student_id, String) == str(user.id),
+            )
+            .first()
+        )
     return participant is not None
 
 
