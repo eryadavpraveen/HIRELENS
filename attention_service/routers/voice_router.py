@@ -1,12 +1,40 @@
-from fastapi import APIRouter, UploadFile, File, Form, Header
-import tempfile
+from fastapi import APIRouter, UploadFile, File, Form, Header, HTTPException
+import logging
+import os
 import shutil
+import tempfile
 
 from storage.voice_store import save_voiceprint, load_voiceprint, delete_voiceprint
 from services.voice_verifier import generate_embedding, compare_embeddings
 from auth.jwt_auth import authorize_student_voice
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/voice", tags=["Voice"])
+
+
+def _save_upload(audio: UploadFile) -> tuple[str, str]:
+    suffix = ".wav"
+    if audio.filename and audio.filename.lower().endswith(".webm"):
+        suffix = ".webm"
+    elif audio.content_type and "webm" in audio.content_type:
+        suffix = ".webm"
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        shutil.copyfileobj(audio.file, temp_file)
+        temp_file.flush()
+        return temp_file.name, suffix
+    finally:
+        temp_file.close()
+
+
+def _cleanup(path: str) -> None:
+    if path and os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            logger.warning("Could not delete temp audio file: %s", path)
 
 
 @router.post("/register")
@@ -17,12 +45,18 @@ async def register_voice(
 ):
     authorize_student_voice(candidate_id, authorization)
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_file:
-        shutil.copyfileobj(audio.file, temp_file)
-        audio_path = temp_file.name
-
-    embedding = generate_embedding(audio_path)
-    save_voiceprint(candidate_id, embedding)
+    audio_path, _ = _save_upload(audio)
+    try:
+        embedding = generate_embedding(audio_path)
+        save_voiceprint(candidate_id, embedding)
+    except Exception as exc:
+        logger.exception("Voice registration failed for %s", candidate_id)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice processing failed: {exc}",
+        ) from exc
+    finally:
+        _cleanup(audio_path)
 
     return {"status": "REGISTERED"}
 
@@ -39,11 +73,18 @@ async def verify_voice_api(
     if stored is None:
         return {"status": "NOT_REGISTERED"}
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_file:
-        shutil.copyfileobj(audio.file, temp_file)
-        audio_path = temp_file.name
+    audio_path, _ = _save_upload(audio)
+    try:
+        current_embedding = generate_embedding(audio_path)
+    except Exception as exc:
+        logger.exception("Voice verify failed for %s", candidate_id)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice processing failed: {exc}",
+        ) from exc
+    finally:
+        _cleanup(audio_path)
 
-    current_embedding = generate_embedding(audio_path)
     similarity = compare_embeddings(stored, current_embedding)
 
     if similarity >= 0.85:

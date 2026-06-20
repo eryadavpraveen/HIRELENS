@@ -1,5 +1,6 @@
 import api from './api'
 import { API_BASE_URL } from '../utils/constants'
+import { ensureWavBlob } from './audioRecorder'
 
 /**
  * monitoringService — AI monitoring via the main API (proxies attention service when needed).
@@ -56,9 +57,10 @@ export const monitoringService = {
   },
 
   registerVoice: async (candidateId, audioBlob) => {
+    const wavBlob = await ensureWavBlob(audioBlob)
     const form = new FormData()
     form.append('candidate_id', candidateId)
-    form.append('audio', audioBlob, 'voice.webm')
+    form.append('audio', wavBlob, 'voice.wav')
     const { data } = await api.post('/voice/register', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: VOICE_TIMEOUT_MS,
@@ -67,9 +69,10 @@ export const monitoringService = {
   },
 
   verifyVoice: async (candidateId, audioBlob) => {
+    const wavBlob = await ensureWavBlob(audioBlob)
     const form = new FormData()
     form.append('candidate_id', candidateId)
-    form.append('audio', audioBlob, 'voice.webm')
+    form.append('audio', wavBlob, 'voice.wav')
     const { data } = await api.post('/voice/verify', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: VOICE_TIMEOUT_MS,
