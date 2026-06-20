@@ -9,6 +9,7 @@ import { Input } from '@/components/common/Input'
 import { PageLoader, EmptyState } from '@/components/common/LoadingSpinner'
 import { CircularProgress } from '@/components/common/CircularProgress'
 import { getEvaluation } from '@/utils/violations'
+import reportService from '@/services/reportService'
 import { generateReportPdf } from '@/utils/pdfGenerator'
 import { formatDate, cn } from '@/utils/helpers'
 
@@ -128,7 +129,14 @@ export default function RecruiterReportsPage() {
                   <Button asChild variant="outline" size="sm" className="flex-1">
                     <Link to={`/recruiter/reports/${r.id}`}><Eye className="h-4 w-4" /> View</Link>
                   </Button>
-                  <Button size="sm" className="flex-1" onClick={() => generateReportPdf(r)}>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={async () => {
+                      const full = await reportService.getById(r.id)
+                      generateReportPdf(full)
+                    }}
+                  >
                     <Download className="h-4 w-4" /> PDF
                   </Button>
                 </div>

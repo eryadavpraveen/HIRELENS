@@ -20,7 +20,7 @@ import { ViolationTimeline } from '@/components/monitoring/ViolationTimeline'
 import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { PageLoader } from '@/components/common/LoadingSpinner'
-import { mockCandidates } from '@/utils/mockData'
+import interviewService from '@/services/interviewService'
 import { formatDuration } from '@/utils/helpers'
 import { useWebRTC } from '@/hooks/useWebRTC'
 
@@ -34,8 +34,9 @@ export default function RecruiterInterviewRoom() {
   const [elapsed, setElapsed] = useState(0)
   const [cameraOn, setCameraOn] = useState(true)
   const [micOn, setMicOn] = useState(true)
-  const [sessionEnded, setSessionEnded] = useState(false)
+  const [candidate, setCandidate] = useState(null)
   const [endedMessage, setEndedMessage] = useState('')
+  const [sessionEnded, setSessionEnded] = useState(false)
   const sessionEndRef = useRef(false)
 
   const handleSessionEnd = useCallback((message) => {
@@ -76,6 +77,30 @@ export default function RecruiterInterviewRoom() {
       handleSessionEnd('This interview has already been completed.')
     }
   }, [currentInterview, handleSessionEnd])
+
+  useEffect(() => {
+    if (!id) return
+    interviewService
+      .getParticipants(id)
+      .then((participants) => {
+        const primary = participants?.[0]
+        if (primary?.name || primary?.email) {
+          setCandidate({ name: primary.name, email: primary.email })
+        }
+      })
+      .catch(() => {})
+  }, [id])
+
+  const displayCandidate = useMemo(() => {
+    if (candidate?.name || candidate?.email) return candidate
+    if (currentInterview?.candidate_name || currentInterview?.candidate_email) {
+      return {
+        name: currentInterview.candidate_name,
+        email: currentInterview.candidate_email,
+      }
+    }
+    return null
+  }, [candidate, currentInterview])
 
   // Live integrity assessment derived from the streaming violation timeline.
   const assessment = useMemo(() => violationService.aggregate(liveEvents), [liveEvents])
@@ -136,7 +161,7 @@ export default function RecruiterInterviewRoom() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Monitoring: {currentInterview.title}</h1>
-          <p className="text-sm text-muted-foreground">{currentInterview.candidate_name || 'Candidate'}</p>
+          <p className="text-sm text-muted-foreground">{displayCandidate?.name || currentInterview.candidate_name || 'Awaiting candidate'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={wsConnected ? 'success' : 'warning'} className="gap-1.5">
@@ -172,7 +197,7 @@ export default function RecruiterInterviewRoom() {
         <div className="space-y-4 xl:col-span-4">
           <IntegrityDashboard score={assessment.integrityScore} compact />
           <MonitoringPanel statuses={statuses} />
-          <CandidateInfoPanel candidate={mockCandidates[0]} interview={currentInterview} />
+          <CandidateInfoPanel candidate={displayCandidate} interview={currentInterview} />
           <EventTimeline events={liveEvents} />
         </div>
       </div>

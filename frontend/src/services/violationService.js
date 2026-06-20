@@ -1,8 +1,7 @@
 import api from './api'
 import { buildViolationSummary, computeIntegrityScore, getEvaluation } from '../utils/violations'
 import { mockReports } from '../utils/mockData'
-
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+import { IS_MOCK } from '../utils/env'
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -24,7 +23,7 @@ function delay(ms) {
 export const violationService = {
   /** Record a single violation event. */
   record: async ({ interviewId, studentId, type, duration = null, confidence = 0 }) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(120)
       return { message: 'Violation recorded (mock)', id: `v-${Date.now()}` }
     }
@@ -40,7 +39,7 @@ export const violationService = {
 
   /** Fetch the raw timeline for an interview. */
   getByInterview: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(200)
       const report = mockReports.find((r) => r.interview_id === interviewId)
       return report ? report.events : []

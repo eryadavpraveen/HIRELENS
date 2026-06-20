@@ -1,4 +1,5 @@
 from fastapi import Depends, HTTPException, status
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from app.auth.auth import get_current_user
@@ -6,6 +7,42 @@ from app.database.database import get_db
 from app.models.interview import Interview
 from app.models.participant import Participant
 from app.models.user import User
+
+
+def _participant_query(db: Session, interview_id, student_id=None):
+    interview_key = str(interview_id)
+    query = db.query(Participant).filter(cast(Participant.interview_id, String) == interview_key)
+    if student_id is not None:
+        query = query.filter(cast(Participant.student_id, String) == str(student_id))
+    return query
+
+
+def get_or_create_student_participant(
+    db: Session,
+    interview_id: str,
+    user: User,
+) -> Participant:
+    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    if interview.status == "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="This interview has already been completed.",
+        )
+
+    participant = _participant_query(db, interview_id, user.id).first()
+    if participant:
+        return participant
+
+    participant = Participant(
+        interview_id=interview.id,
+        student_id=user.id,
+    )
+    db.add(participant)
+    db.commit()
+    db.refresh(participant)
+    return participant
 
 
 def require_roles(*roles: str):
@@ -115,14 +152,5 @@ def authorize_student_verification(
     if interview.status == "completed":
         raise HTTPException(status_code=400, detail="Interview has already been completed")
 
-    participant = (
-        db.query(Participant)
-        .filter(
-            Participant.interview_id == interview_id,
-            Participant.student_id == str(current_user.id),
-        )
-        .first()
-    )
-    if not participant:
-        raise HTTPException(status_code=403, detail="Join the interview before verification")
+    get_or_create_student_participant(db, interview_id, current_user)
     return interview

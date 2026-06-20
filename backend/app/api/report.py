@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import cast, String
 
 from app.database.database import get_db
 from app.models.interview import Interview
 from app.models.violation import Violation
-from app.auth.dependencies import require_recruiter
 from app.models.user import User
+from app.auth.dependencies import require_recruiter
+from app.services.interview_presenter import serialize_interview
 
 router = APIRouter()
 
 
-def _build_report(interview: Interview, violations: list[Violation]) -> dict:
+def _build_report(interview: Interview, violations: list[Violation], db: Session) -> dict:
+    base = serialize_interview(db, interview)
     events = [
         {
             "id": str(v.id),
@@ -22,13 +23,14 @@ def _build_report(interview: Interview, violations: list[Violation]) -> dict:
         }
         for v in violations
     ]
+    created_at = interview.completed_at or interview.end_time or interview.created_at
     return {
-        "id": str(interview.id),
+        **base,
         "interview_id": str(interview.id),
+        "interview_title": interview.title,
         "title": interview.title,
-        "candidate_name": None,
         "events": events,
-        "status": interview.status,
+        "created_at": created_at.isoformat() if created_at else base.get("created_at"),
     }
 
 
@@ -46,11 +48,11 @@ def list_reports(
     for interview in interviews:
         violations = (
             db.query(Violation)
-            .filter(Violation.interview_id == str(interview.id))
+            .filter(cast(Violation.interview_id, String) == str(interview.id))
             .order_by(Violation.timestamp.asc())
             .all()
         )
-        reports.append(_build_report(interview, violations))
+        reports.append(_build_report(interview, violations, db))
     return reports
 
 
@@ -68,11 +70,11 @@ def get_report(
 
     violations = (
         db.query(Violation)
-        .filter(Violation.interview_id == report_id)
+        .filter(cast(Violation.interview_id, String) == str(report_id))
         .order_by(Violation.timestamp.asc())
         .all()
     )
-    return _build_report(interview, violations)
+    return _build_report(interview, violations, db)
 
 
 @router.post("/generate/{interview_id}")

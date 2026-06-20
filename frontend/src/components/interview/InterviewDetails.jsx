@@ -35,9 +35,9 @@ export function CandidateInfoPanel({ candidate, interview }) {
         <CardTitle className="text-base">Candidate Information</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <DetailRow label="Name" value={candidate?.name || 'Alex Johnson'} />
-        <DetailRow label="Email" value={candidate?.email || 'candidate@student.edu'} />
-        <DetailRow label="Resume" value={candidate?.resume || 'resume.pdf'} />
+        <DetailRow label="Name" value={candidate?.name || '—'} />
+        <DetailRow label="Email" value={candidate?.email || '—'} />
+        <DetailRow label="Resume" value={candidate?.resume || '—'} />
         <DetailRow label="Duration" value={`${interview?.duration || 60} min`} />
       </CardContent>
     </Card>

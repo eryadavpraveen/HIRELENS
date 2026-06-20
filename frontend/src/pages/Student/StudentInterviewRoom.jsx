@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { Play, Maximize, Clock, ShieldCheck } from 'lucide-react'
-import { fetchInterviewById } from '@/features/interview/interviewSlice'
+import { fetchInterviewById, joinInterview } from '@/features/interview/interviewSlice'
 import { clearMonitoring } from '@/features/monitoring/monitoringSlice'
 import { VideoStream } from '@/components/interview/VideoStream'
 import { StudentInterviewControls } from '@/components/interview/InterviewControls'
@@ -75,6 +75,7 @@ export default function StudentInterviewRoom() {
   useEffect(() => {
     dispatch(fetchInterviewById(id))
     dispatch(clearMonitoring())
+    dispatch(joinInterview(id)).unwrap().catch(() => {})
   }, [dispatch, id])
 
   useEffect(() => {

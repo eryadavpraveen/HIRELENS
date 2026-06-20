@@ -7,6 +7,7 @@ from app.models.participant import Participant
 from app.schemas.interview import InterviewCreate, InterviewComplete, InterviewJoinPreview
 from app.services.interview_cleanup import delete_interview_cascade
 from app.services.interview_complete import complete_interview as complete_interview_service
+from app.services.interview_presenter import serialize_interview
 from app.auth.auth import get_current_user
 from app.auth.dependencies import require_recruiter, require_student
 from app.models.user import User
@@ -49,7 +50,7 @@ def get_interviews(
             .filter(Interview.recruiter_id == str(current_user.id))
             .all()
         )
-        return interviews
+        return [serialize_interview(db, interview) for interview in interviews]
 
     if current_user.role == "student":
         interviews = (
@@ -58,7 +59,7 @@ def get_interviews(
             .filter(Participant.student_id == str(current_user.id))
             .all()
         )
-        return interviews
+        return [serialize_interview(db, interview) for interview in interviews]
 
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
@@ -117,7 +118,7 @@ def get_interview(
     else:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-    return interview
+    return serialize_interview(db, interview)
 
 
 @router.patch("/{interview_id}/complete")
@@ -157,7 +158,7 @@ async def complete_interview(
     if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
 
-    return interview
+    return serialize_interview(db, interview)
 
 
 @router.delete("/{interview_id}")

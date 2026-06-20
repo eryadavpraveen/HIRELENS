@@ -1,12 +1,11 @@
 import api from './api'
 import { mockInterviews } from '../utils/mockData'
 import { generateInterviewCode } from '../utils/helpers'
-
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+import { IS_MOCK } from '../utils/env'
 
 export const interviewService = {
   getAll: async () => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(300)
       return mockInterviews
     }
@@ -15,7 +14,7 @@ export const interviewService = {
   },
 
   getById: async (id) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(200)
       const interview = mockInterviews.find((i) => i.id === id)
       if (!interview) throw new Error('Interview not found')
@@ -26,7 +25,7 @@ export const interviewService = {
   },
 
   create: async (interviewData) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(500)
       const code = generateInterviewCode()
       const id = `int-${Date.now()}`
@@ -55,7 +54,7 @@ export const interviewService = {
   },
 
   join: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(300)
       const interview = mockInterviews.find((i) => i.id === interviewId)
       if (interview?.status === 'completed') {
@@ -68,7 +67,7 @@ export const interviewService = {
   },
 
   validateJoin: async ({ interviewId, code, link }) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(400)
       let interview = null
       if (interviewId) {
@@ -96,7 +95,7 @@ export const interviewService = {
   },
 
   getParticipants: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(200)
       return [{ id: 'part-1', student_id: 'stu-001', joined_at: new Date().toISOString() }]
     }
@@ -105,7 +104,7 @@ export const interviewService = {
   },
 
   endInterview: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(300)
       return { message: 'Interview ended', status: 'completed' }
     }
@@ -114,7 +113,7 @@ export const interviewService = {
   },
 
   remove: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(300)
       return { message: 'Interview deleted successfully', id: interviewId }
     }
@@ -123,7 +122,7 @@ export const interviewService = {
   },
 
   complete: async (interviewId, reason = 'RECRUITER') => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(300)
       const interview = mockInterviews.find((i) => i.id === interviewId)
       if (!interview) throw new Error('Interview not found')

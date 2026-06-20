@@ -17,6 +17,7 @@ from app.api.interview import router as interview_router
 from app.api.participant import router as participant_router
 from app.api.violation import router as violation_router
 from app.api.report import router as report_router
+from app.api.candidate import router as candidate_router
 from app.api.verification import router as verification_router
 from app.api.cv import router as cv_router
 from app.api.identity import router as identity_router
@@ -65,6 +66,7 @@ app.include_router(participant_router, prefix="/interviews", tags=["Participants
 app.include_router(interview_router, prefix="/interviews", tags=["Interviews"])
 app.include_router(violation_router, prefix="/violations", tags=["Violations"])
 app.include_router(report_router, prefix="/reports", tags=["Reports"])
+app.include_router(candidate_router, prefix="/candidates", tags=["Candidates"])
 app.include_router(signaling_router, tags=["Signaling"])
 
 

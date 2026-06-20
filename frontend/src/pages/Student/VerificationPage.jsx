@@ -10,7 +10,7 @@ import { Button } from '@/components/common/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/common/Card'
 import { cn } from '@/utils/helpers'
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+import { IS_MOCK } from '@/utils/env'
 const VOICE_CLIP_MS = 5000
 
 function StepIndicator({ index, title, done, active }) {
@@ -133,7 +133,7 @@ export default function VerificationPage() {
 
       setDone(true)
     } catch (err) {
-      if (USE_MOCK) {
+      if (IS_MOCK) {
         // Mock fallback: allow the demo to proceed even without the backend.
         setVerificationStep(id, { photo: true, voice: true })
         setDone(true)

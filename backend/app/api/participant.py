@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.participant import Participant
 from app.models.interview import Interview
-from app.auth.dependencies import require_student
 from app.models.user import User
+from app.auth.dependencies import require_student, get_or_create_student_participant
 from app.auth.auth import get_current_user
 
 router = APIRouter()
@@ -17,37 +18,7 @@ def join_interview(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_student),
 ):
-    interview = db.query(Interview).filter(Interview.id == interview_id).first()
-    if not interview:
-        raise HTTPException(status_code=404, detail="Interview not found")
-
-    if interview.status == "completed":
-        raise HTTPException(
-            status_code=400,
-            detail="This interview has already been completed.",
-        )
-
-    existing = (
-        db.query(Participant)
-        .filter(
-            Participant.interview_id == interview_id,
-            Participant.student_id == str(current_user.id),
-        )
-        .first()
-    )
-
-    if existing:
-        return {"message": "Already joined"}
-
-    participant = Participant(
-        interview_id=interview_id,
-        student_id=str(current_user.id),
-    )
-
-    db.add(participant)
-    db.commit()
-    db.refresh(participant)
-
+    participant = get_or_create_student_participant(db, interview_id, current_user)
     return {
         "message": "Joined interview",
         "participant_id": str(participant.id),
@@ -71,8 +42,8 @@ def get_participants(
         participant = (
             db.query(Participant)
             .filter(
-                Participant.interview_id == interview_id,
-                Participant.student_id == str(current_user.id),
+                cast(Participant.interview_id, String) == str(interview_id),
+                cast(Participant.student_id, String) == str(current_user.id),
             )
             .first()
         )
@@ -83,8 +54,24 @@ def get_participants(
 
     participants = (
         db.query(Participant)
-        .filter(Participant.interview_id == interview_id)
+        .filter(cast(Participant.interview_id, String) == str(interview_id))
         .all()
     )
 
-    return participants
+    results = []
+    for participant in participants:
+        student = db.query(User).filter(cast(User.id, String) == str(participant.student_id)).first()
+        if not student:
+            student = db.query(User).filter(User.id == participant.student_id).first()
+        results.append(
+            {
+                "id": str(participant.id),
+                "interview_id": str(participant.interview_id),
+                "student_id": str(participant.student_id),
+                "joined_at": participant.joined_at.isoformat() if participant.joined_at else None,
+                "name": student.name if student else None,
+                "email": student.email if student else None,
+            }
+        )
+
+    return results

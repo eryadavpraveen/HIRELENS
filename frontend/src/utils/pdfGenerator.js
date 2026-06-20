@@ -20,6 +20,12 @@ function hexToRgb(hex) {
   return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)]
 }
 
+function formatReportDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString()
+}
+
 /**
  * Generate a professional HIRELENS integrity report PDF.
  * Sections: branded header + tagline, generated timestamp, interview info,
@@ -70,10 +76,10 @@ export function generateReportPdf(report = {}) {
   doc.setTextColor(MUTED.r, MUTED.g, MUTED.b)
 
   const left = [
-    ['Interview', report.interview_title || '—'],
+    ['Interview', report.interview_title || report.title || '—'],
     ['Recruiter', report.recruiter_name || '—'],
-    ['Date', report.start_time ? new Date(report.start_time).toLocaleDateString() : '—'],
-    ['Status', report.completion_status || 'completed'],
+    ['Date', formatReportDate(report.start_time || report.created_at || report.end_time)],
+    ['Status', report.completion_status || report.status || '—'],
   ]
   const right = [
     ['Name', report.candidate_name || '—'],

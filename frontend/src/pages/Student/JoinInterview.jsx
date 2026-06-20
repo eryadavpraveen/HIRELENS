@@ -31,7 +31,7 @@ export default function JoinInterviewPage() {
     try {
       const interview = await interviewService.validateJoin({ interviewId, code, link })
       dispatch(setCurrentInterview(interview))
-      await dispatch(joinInterview(interview.id))
+      await dispatch(joinInterview(interview.id)).unwrap()
       // Identity + voice verification is required before entering the room.
       navigate(`/student/interview/${interview.id}/verify`)
     } catch (err) {

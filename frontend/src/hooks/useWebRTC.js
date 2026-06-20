@@ -7,7 +7,7 @@ import {
   setConnected,
 } from '../features/monitoring/monitoringSlice'
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+import { IS_MOCK } from '@/utils/env'
 
 /**
  * useWebRTC
@@ -212,7 +212,7 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
     }
 
     function startMockFallback() {
-      if (!USE_MOCK || mockTimerRef.current || !receiveMonitoring) return
+      if (!IS_MOCK || mockTimerRef.current || !receiveMonitoring) return
       setUsingMock(true)
       const seq = [
         ['HEAD_LEFT', 2.1],

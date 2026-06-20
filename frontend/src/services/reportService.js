@@ -2,18 +2,31 @@ import api from './api'
 import { mockReports } from '../utils/mockData'
 import { violationService } from './violationService'
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+import { IS_MOCK } from '../utils/env'
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Normalize API report shape for UI components. */
+function normalizeReport(report) {
+  if (!report) return report
+  return {
+    ...report,
+    interview_title: report.interview_title || report.title || 'Interview',
+    candidate_name: report.candidate_name || '—',
+    candidate_email: report.candidate_email || '',
+    created_at: report.created_at || report.end_time || report.start_time || null,
+  }
+}
+
 /** Attach the computed integrity assessment (summary, score, evaluation). */
 function enrich(report) {
   if (!report) return report
-  const assessment = violationService.aggregate(report.events || [])
+  const normalized = normalizeReport(report)
+  const assessment = violationService.aggregate(normalized.events || [])
   return {
-    ...report,
+    ...normalized,
     summary: assessment.summary,
     integrity_score: assessment.integrityScore,
     evaluation: assessment.evaluation.label,
@@ -22,7 +35,7 @@ function enrich(report) {
 
 export const reportService = {
   getAll: async () => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(300)
       return mockReports.map(enrich)
     }
@@ -31,7 +44,7 @@ export const reportService = {
   },
 
   getById: async (reportId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(200)
       const report =
         mockReports.find((r) => r.id === reportId) ||
@@ -45,7 +58,7 @@ export const reportService = {
 
   /** Build a report directly from an interview's violation timeline. */
   getByInterview: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(200)
       const report = mockReports.find((r) => r.interview_id === interviewId)
       if (report) return enrich(report)
@@ -56,7 +69,7 @@ export const reportService = {
   },
 
   generateReport: async (interviewId) => {
-    if (USE_MOCK) {
+    if (IS_MOCK) {
       await delay(700)
       return { message: 'Report generated', report_id: `rep-${Date.now()}` }
     }
