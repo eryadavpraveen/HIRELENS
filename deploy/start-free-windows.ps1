@@ -34,7 +34,7 @@ try {
     $health = Invoke-RestMethod "http://127.0.0.1:8000/" -TimeoutSec 5
     Write-Host "Backend OK: $($health.message)" -ForegroundColor Green
 } catch {
-    Write-Warning "Backend not responding yet — check deploy\backend-err.log"
+    Write-Warning "Backend not responding yet - check deploy\backend-err.log"
 }
 
 if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
@@ -48,4 +48,4 @@ if (Get-Command cloudflared -ErrorAction SilentlyContinue) {
 
 Write-Host ""
 Write-Host "Done. If video still fails, run: deploy\test_ws.py (WebSocket must connect)." -ForegroundColor Yellow
-Write-Host "Tunnel URL is in deploy\tunnel-api.log — update Vercel VITE_API_BASE_URL and VITE_WS_BASE_URL." -ForegroundColor Yellow
+Write-Host 'Tunnel URL is in deploy\tunnel-api.log - update Vercel VITE_API_BASE_URL and VITE_WS_BASE_URL.' -ForegroundColor Yellow
