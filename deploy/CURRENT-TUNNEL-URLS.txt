@@ -19,3 +19,8 @@ FRONTEND_URL=https://hirelens-puce-two.vercel.app
 ATTENTION_SERVICE_URL=http://127.0.0.1:8001
 
 After saving Vercel env vars: Deployments → Redeploy (without cache).
+
+# CRITICAL — video/audio needs WebSocket support in mediapipe_env:
+#   mediapipe_env\Scripts\python.exe -m pip install "uvicorn[standard]" websockets
+# Restart backend after install (without websockets, /ws/* returns HTTP 404).
+# Or run: .\deploy\start-free-windows.ps1

@@ -17,6 +17,7 @@ _ORIGIN_REGEX = re.compile(
     r"|^https://[a-zA-Z0-9-]+\.vercel\.app$"
     r"|^https://[a-zA-Z0-9-]+\.netlify\.app$"
     r"|^https://[a-zA-Z0-9-]+\.onrender\.com$"
+    r"|^https://[a-zA-Z0-9-]+\.trycloudflare\.com$"
 )
 
 

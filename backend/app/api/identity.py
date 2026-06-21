@@ -47,7 +47,8 @@ async def verify_identity(
 
     try:
         result = verify_faces(reference_image, current_image)
-        return result
+        verified = result if isinstance(result, bool) else result.get("verified")
+        return {"verified": verified}
     except Exception as e:
         return {"verified": False, "error": str(e)}
     finally:

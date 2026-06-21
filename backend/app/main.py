@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 import logging
+import traceback
 
 from app.database.database import engine, Base
 from app.database.migration_runner import apply_pending_migrations
@@ -70,6 +73,23 @@ app.include_router(report_router, prefix="/reports", tags=["Reports"])
 app.include_router(candidate_router, prefix="/candidates", tags=["Candidates"])
 app.include_router(attention_proxy_router, tags=["Attention Proxy"])
 app.include_router(signaling_router, tags=["Signaling"])
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Log full tracebacks; return JSON 500 so CORS middleware can attach headers."""
+    if isinstance(exc, (HTTPException, RequestValidationError)):
+        raise exc
+    logger.error(
+        "Unhandled error on %s %s:\n%s",
+        request.method,
+        request.url.path,
+        traceback.format_exc(),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 
 @app.get("/")

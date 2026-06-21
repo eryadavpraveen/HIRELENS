@@ -15,14 +15,22 @@ peer-to-peer by WebRTC). The server only forwards small JSON control messages
 to the *other* participants in the same room.
 """
 
+import asyncio
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, List, Optional, Tuple, Type
+
+from sqlalchemy import cast, String
 
 from app.database.database import SessionLocal
 from app.models.interview import Interview
 from app.models.participant import Participant
 from app.models.user import User
 from app.auth.auth import decode_access_token
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -63,7 +71,7 @@ class ConnectionManager:
         self.rooms: Dict[str, List[dict]] = {}
 
     async def connect(self, interview_id: str, websocket: WebSocket, role: str):
-        await websocket.accept()
+        # Socket may already be accepted (signaling handler accepts before auth).
         self.rooms.setdefault(interview_id, []).append(
             {"ws": websocket, "role": role}
         )
@@ -148,6 +156,39 @@ RELAY_TYPES = {
 }
 
 
+async def _await_auth_token(websocket: WebSocket, query_token: Optional[str]) -> Optional[str]:
+    """Use query token (legacy) or wait for first { type: auth, token } message."""
+    if query_token:
+        return query_token
+    try:
+        data = await asyncio.wait_for(websocket.receive_json(), timeout=15.0)
+    except asyncio.TimeoutError:
+        return None
+    if data.get("type") == "auth" and data.get("token"):
+        return data.get("token")
+    return None
+
+
+def _find_user(db, user_id: str) -> Optional[User]:
+    if not user_id:
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        return user
+    return db.query(User).filter(cast(User.id, String) == str(user_id)).first()
+
+
+def _find_interview(db, interview_id: str) -> Optional[Interview]:
+    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+    if interview:
+        return interview
+    return (
+        db.query(Interview)
+        .filter(cast(Interview.id, String) == str(interview_id))
+        .first()
+    )
+
+
 def _authorize_websocket(db, interview: Interview, role: str, token: str) -> bool:
     if role not in ("recruiter", "student"):
         return False
@@ -156,7 +197,7 @@ def _authorize_websocket(db, interview: Interview, role: str, token: str) -> boo
     if not payload:
         return False
 
-    user = db.query(User).filter(User.id == payload.get("sub")).first()
+    user = _find_user(db, payload.get("sub"))
     if not user or user.role != role:
         return False
 
@@ -166,13 +207,12 @@ def _authorize_websocket(db, interview: Interview, role: str, token: str) -> boo
     participant = (
         db.query(Participant)
         .filter(
-            Participant.interview_id == str(interview.id),
-            Participant.student_id == str(user.id),
+            Participant.interview_id == interview.id,
+            Participant.student_id == user.id,
         )
         .first()
     )
     if not participant:
-        from sqlalchemy import cast, String
         participant = (
             db.query(Participant)
             .filter(
@@ -187,20 +227,23 @@ def _authorize_websocket(db, interview: Interview, role: str, token: str) -> boo
 @router.websocket("/ws/interview/{interview_id}")
 async def interview_socket(websocket: WebSocket, interview_id: str):
     role = websocket.query_params.get("role", "guest")
-    token = websocket.query_params.get("token")
+    query_token = websocket.query_params.get("token")
+
+    await websocket.accept()
+
+    token = await _await_auth_token(websocket, query_token)
 
     db = SessionLocal()
     try:
-        interview = (
-            db.query(Interview)
-            .filter(Interview.id == interview_id)
-            .first()
-        )
+        interview = _find_interview(db, interview_id)
         if not interview:
+            await _safe_send_json(
+                websocket,
+                {"type": "auth-error", "message": "Interview not found"},
+            )
             await websocket.close(code=4004, reason="Interview not found")
             return
         if interview.status == "completed":
-            await websocket.accept()
             sent = await _safe_send_json(
                 websocket,
                 {
@@ -217,12 +260,25 @@ async def interview_socket(websocket: WebSocket, interview_id: str):
             return
 
         if not _authorize_websocket(db, interview, role, token):
+            await _safe_send_json(
+                websocket,
+                {
+                    "type": "auth-error",
+                    "message": "Signaling unauthorized. Log in again or join the interview first.",
+                },
+            )
             await websocket.close(code=4401, reason="Unauthorized")
             return
     finally:
         db.close()
 
     await manager.connect(interview_id, websocket, role)
+    logger.info(
+        "signaling: %s joined interview %s (room peers: %s)",
+        role,
+        interview_id,
+        manager.participants(interview_id),
+    )
 
     if not await _safe_send_json(
         websocket,
@@ -249,7 +305,16 @@ async def interview_socket(websocket: WebSocket, interview_id: str):
             data.setdefault("from", role)
 
             if msg_type in RELAY_TYPES:
+                if msg_type in ("offer", "answer", "request-offer"):
+                    logger.info(
+                        "signaling relay %s interview=%s from=%s",
+                        msg_type,
+                        interview_id,
+                        role,
+                    )
                 await manager.broadcast(interview_id, data, exclude=websocket)
+            elif msg_type == "auth":
+                logger.warning("signaling: late auth message from %s on %s", role, interview_id)
             # Unknown message types are ignored (forward-compatible).
 
     except WebSocketDisconnect:
