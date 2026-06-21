@@ -1,6 +1,6 @@
 # HIRELENS free-tier local stack (Windows): backend + attention + Cloudflare tunnel
 $ErrorActionPreference = "Stop"
-$Root = Split-Path $Parent -Parent $MyInvocation.MyCommand.Path
+$Root = Split-Path -Parent $PSScriptRoot
 $VenvPython = Join-Path $Root "mediapipe_env\Scripts\python.exe"
 
 if (-not (Test-Path $VenvPython)) {
