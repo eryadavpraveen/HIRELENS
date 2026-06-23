@@ -701,6 +701,7 @@ docs/              Full technical documentation
 
 ## 18. Platform Overview (Screenshots)
 
+![HIRELENS Home Page](<img width="1920" height="1200" alt="Screenshot (101)" src="https://github.com/user-attachments/assets/d30269a4-07b3-48a3-8c6f-2ac02ab13acd" />)
 
 ---
 
