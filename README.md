@@ -706,3 +706,4 @@ docs/              Full technical documentation
 
 
 
+## Platform Overview (Screenshots)
