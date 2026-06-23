@@ -699,15 +699,7 @@ docs/              Full technical documentation
 
 ---
 
-## 18. Platform Overview (Screenshots)
 
-<h2 align="center">Landing Page & User Authentication</h2>
-
-<p align="center">
-  <img src="IMAGE_URL_1" alt="Landing Page" width="32%">
-  <img src="IMAGE_URL_2" alt="Landing Page" width="32%">
-  <img src="D:\Pictures\Screenshots\Screenshot (103).png" alt="Landing Page" width="32%">
-</p>
 
 
 
