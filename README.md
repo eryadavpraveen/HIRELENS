@@ -698,6 +698,13 @@ docs/              Full technical documentation
 | Login fails on Vercel | `VITE_API_BASE_URL` must point to live backend, not localhost |
 
 ---
+
+## 18. Platform Overview (Screenshots)
+
+
+---
+
+
 ## License & links
 
 - **GitHub:** https://github.com/eryadavpraveen/HIRELENS
@@ -706,4 +713,4 @@ docs/              Full technical documentation
 
 
 
-## Platform Overview (Screenshots)
+
