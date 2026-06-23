@@ -522,34 +522,6 @@ VITE_USE_MOCK=false
 
 ## 16. Deployment
 
-| Piece | Recommended host |
-|-------|------------------|
-| Frontend | Vercel (`frontend/`, `vercel.json`) |
-| Database | Supabase free tier |
-| Backend + Attention | Oracle Always Free VM, or VPS (see `deploy/`) |
-
-Scripts:
-
-- `deploy/oracle-vm-setup.sh` — Ubuntu VM bootstrap
-- `deploy/nginx-hirelens.conf` — Reverse proxy + WebSocket
-- `deploy/render.yaml` — Render blueprint (ML may be tight on free tier)
-
-See `frontend/.env.production.example` for Vercel variables.
-
-
-
-## Document history
-
-| Date | Notes |
-|------|-------|
-| 2026-06 | Initial documentation — Phase 2 auth, join-preview, lazy attention startup, student silent violations, recruiter media toggles |
-
-For questions or updates, edit this file in `docs/HIRELENS_DOCUMENTATION.md`.
-
-
-
-
-
 
 | Layer | Host |
 |-------|------|
@@ -558,11 +530,10 @@ For questions or updates, edit this file in `docs/HIRELENS_DOCUMENTATION.md`.
 | Backend API + signaling | Your PC (`:8000`) via Cloudflare tunnel |
 | Attention / voice ML | Your PC (`:8001`, internal) |
 
-**Full technical docs:** [`docs/HIRELENS_DOCUMENTATION.md`](docs/HIRELENS_DOCUMENTATION.md)
 
 ---
 
-## Prerequisites
+### 16.1. Prerequisites
 
 - Windows PC (for free-tier backend hosting)
 - Python 3.11+ with venv at `mediapipe_env/`
@@ -573,9 +544,9 @@ For questions or updates, edit this file in `docs/HIRELENS_DOCUMENTATION.md`.
 
 ---
 
-## Quick start: PC backend + Vercel frontend
+### 16.2 Quick start: PC backend + Vercel frontend
 
-### 1. Backend environment (`backend/.env`)
+#### 16.2.1. Backend environment (`backend/.env`)
 
 ```env
 FRONTEND_URL=https://hirelens-puce-two.vercel.app
@@ -584,7 +555,7 @@ DATABASE_URL=postgresql://...
 SECRET_KEY=your-secret-key
 ```
 
-### 2. Install Python dependencies (once)
+#### 16.2.2. Install Python dependencies (once)
 
 ```powershell
 D:\Desktop\InterviewAI_1\mediapipe_env\Scripts\python.exe -m pip install -r D:\Desktop\InterviewAI_1\backend\requirements.txt
@@ -596,7 +567,7 @@ WebRTC video requires WebSockets:
 D:\Desktop\InterviewAI_1\mediapipe_env\Scripts\python.exe -m pip install "uvicorn[standard]" websockets
 ```
 
-### 3. Start services (three terminals)
+#### 16.2.3. Start services (three terminals)
 
 **Terminal 1 — Attention (`:8001`)**
 
@@ -636,7 +607,7 @@ Keep all three terminals open while using the app.
 
 ---
 
-## Connect Vercel to your PC
+#### 16.2.4. Connect Vercel to your PC
 
 The tunnel URL **changes** whenever you restart `cloudflared`. After each restart:
 
@@ -661,7 +632,7 @@ Invoke-RestMethod https://YOUR-tunnel.trycloudflare.com/
 
 ---
 
-## Local development (everything on one PC)
+### 16.3. Local development (everything on one PC)
 
 ```powershell
 # Backend :8000, Attention :8001 (see above)
@@ -683,7 +654,7 @@ Open http://localhost:5173
 
 ---
 
-## Optional: start script
+### 16.4 Optional: start script
 
 ```cmd
 D:\Desktop\InterviewAI_1\deploy\start-free-windows.bat
@@ -693,7 +664,7 @@ Starts attention, backend, and tunnel in the background. Logs: `deploy/backend-e
 
 ---
 
-## Repository structure
+### 16.5. Repository structure
 
 ```text
 backend/           FastAPI API, WebSocket signaling, CV/identity/object
@@ -705,7 +676,7 @@ docs/              Full technical documentation
 
 ---
 
-## Troubleshooting
+## 17. Troubleshooting
 
 | Problem | What to check |
 |---------|----------------|
