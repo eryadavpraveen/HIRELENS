@@ -536,20 +536,7 @@ Scripts:
 
 See `frontend/.env.production.example` for Vercel variables.
 
----
 
-## 17. Troubleshooting
-
-| Issue | Check |
-|-------|--------|
-| Student join 403 | Use join-preview; ensure `POST /join` ran |
-| WebRTC no video | HTTPS required in prod; STUN/TURN; both peers connected |
-| Monitoring not on recruiter | `receiveMonitoring: true` on recruiter `useWebRTC` |
-| Attention `Aborted!` | Start from `attention_service/` cwd; lazy model init |
-| CORS errors | Set `FRONTEND_URL` + `CORS_ORIGINS` on backend/attention |
-| Login fails on Vercel | `VITE_API_BASE_URL` must point to live backend, not localhost |
-
----
 
 ## Document history
 
@@ -563,9 +550,6 @@ For questions or updates, edit this file in `docs/HIRELENS_DOCUMENTATION.md`.
 
 
 
-# HIRELENS (InterviewAI)
-
-AI-proctored remote interviews: WebRTC video between recruiter and student, real-time integrity monitoring (face, gaze, voice, objects), and downloadable reports.
 
 | Layer | Host |
 |-------|------|
@@ -731,8 +715,18 @@ docs/              Full technical documentation
 | Video stuck on "Connecting" | `websockets` installed; WebSocket URL is `wss://` same host as API |
 | Tunnel URL unknown | Read output of `cloudflared` or `deploy/tunnel-api.log` |
 
----
 
+
+| Issue | Check |
+|-------|--------|
+| Student join 403 | Use join-preview; ensure `POST /join` ran |
+| WebRTC no video | HTTPS required in prod; STUN/TURN; both peers connected |
+| Monitoring not on recruiter | `receiveMonitoring: true` on recruiter `useWebRTC` |
+| Attention `Aborted!` | Start from `attention_service/` cwd; lazy model init |
+| CORS errors | Set `FRONTEND_URL` + `CORS_ORIGINS` on backend/attention |
+| Login fails on Vercel | `VITE_API_BASE_URL` must point to live backend, not localhost |
+
+---
 ## License & links
 
 - **GitHub:** https://github.com/eryadavpraveen/HIRELENS
