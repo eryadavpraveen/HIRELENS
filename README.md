@@ -703,3 +703,6 @@ docs/              Full technical documentation
 - **GitHub:** https://github.com/eryadavpraveen/HIRELENS
 - **Production app:** https://hirelens-puce-two.vercel.app
 - **Documentation:** https://drive.google.com/file/d/1Zm6oYHtleAHODCNt6UWASCwYfnQuCPUc/view?usp=sharing
+
+
+<img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/496c2fce-94b5-4718-9826-3a9709f5157a" />
