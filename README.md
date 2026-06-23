@@ -702,7 +702,31 @@ docs/              Full technical documentation
 ## 18. Platform Overview (Screenshots)
 
 ![HIRELENS Home Page](<img width="1920" height="1200" alt="Screenshot (101)" src="https://github.com/user-attachments/assets/d30269a4-07b3-48a3-8c6f-2ac02ab13acd" />)
+<h2 align="center">Landing Page & User Authentication</h2>
 
+
+
+<p align="center">
+
+  <img src="IMAGE_URL_1" alt="Landing Page" width="32%">
+
+  <img src="IMAGE_URL_2" alt="Login Page" width="32%">
+
+  <img src="IMAGE_URL_3" alt="Registration Page" width="32%">
+
+</p>
+
+
+
+<p align="center">
+
+  <em>Landing Page</em> &nbsp;&nbsp;&nbsp;&nbsp;
+
+  <em>Login Page</em> &nbsp;&nbsp;&nbsp;&nbsp;
+
+  <em>Registration Page</em>
+
+</p>
 ---
 
 
