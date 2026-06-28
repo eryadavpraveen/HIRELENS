@@ -3,6 +3,7 @@
 **HIRELENS** (InterviewAI) is an AI-proctored remote interview platform. Recruiters create monitored interviews; students join via WebRTC video calls while computer-vision and voice models detect integrity violations in real time.
 
 **Repository:** [github.com/eryadavpraveen/HIRELENS](https://github.com/eryadavpraveen/HIRELENS)
+**LinkedIn:** [https://www.linkedin.com/posts/eryadavpraveen_reactjs-fastapi-python-ugcPost-7477014565894139904-oNND/?utm_source=share&utm_medium=member_desktop&rcm=ACoAADSw_ioBk2LmAm8RjwFzb-7SxfCnunP3-OI]([https://github.com/eryadavpraveen/HIRELENS](https://www.linkedin.com/posts/eryadavpraveen_reactjs-fastapi-python-ugcPost-7477014565894139904-oNND/?utm_source=share&utm_medium=member_desktop&rcm=ACoAADSw_ioBk2LmAm8RjwFzb-7SxfCnunP3-OI))
 
 ---
 
