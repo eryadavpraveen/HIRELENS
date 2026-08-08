@@ -1,5 +1,6 @@
 %==============================================================================
 % HIRELENS — Detailed Technical Report (Overleaf: pdfLaTeX, compile twice)
+% Updated for Express + Node.js APIs with persistent Python ML workers
 %==============================================================================
 \documentclass[11pt,a4paper]{report}
 
@@ -37,13 +38,15 @@
   \large Detailed Technical Architecture, Models, and Implementation Report
 }
 \author{Praveen Yadav\\\url{https://github.com/eryadavpraveen/HIRELENS}}
-\date{June 2026}
+\date{August 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-HIRELENS is a full-stack web application for integrity-monitored remote interviews. A recruiter and student conduct a peer-to-peer WebRTC video session while multiple machine-learning pipelines analyze the student's webcam and microphone in parallel. Detected anomalies become \emph{violations}: they are persisted in PostgreSQL, streamed in real time to the recruiter dashboard, and aggregated into an \emph{integrity score}. This document explains the complete system architecture, every model used, inference pipelines, API surface, security model, frontend/backend structure, and deployment topology implemented in the production codebase.
+HIRELENS is a full-stack web application for integrity-monitored remote interviews. A recruiter and student conduct a peer-to-peer WebRTC video session while multiple machine-learning pipelines analyze the student's webcam and microphone in parallel. Detected anomalies become \emph{violations}: they are persisted in PostgreSQL, streamed in real time to the recruiter dashboard, and aggregated into an \emph{integrity score}.
+
+The production runtime uses \textbf{Express (Node.js)} for all HTTP/API/business logic and WebSocket signaling. \textbf{Python is used only for ML inference} via persistent child-process workers that communicate over stdin/stdout NDJSON. Verification images are stored in \textbf{Cloudinary}. Optional public demos expose Main Express through a \textbf{Cloudflare Tunnel}. This document explains the complete system architecture, every model used, inference pipelines, API surface, security model, frontend/backend structure, and deployment topology implemented in the current codebase.
 \end{abstract}
 
 \tableofcontents
@@ -63,14 +66,17 @@ Traditional video interviews (Zoom, Meet) do not provide automated proctoring: r
   \item Record violations with timestamps and expose live recruiter dashboards.
   \item Compute a transparent integrity score from violation categories.
   \item Enforce role-based access (recruiter vs student) with JWT authentication.
-  \item Separate heavy ML inference into dedicated services for maintainability.
+  \item Keep HTTP/API in Express; isolate heavy ML in persistent Python workers.
 \end{enumerate}
 
 \section{System Boundaries}
 \begin{itemize}
-  \item \textbf{In scope:} Interview lifecycle, monitoring, WebRTC signaling relay, reports, verification (photo + voice).
-  \item \textbf{Out of scope / partial:} Lip-sync anti-spoofing (mouth-open ratio only), TURN servers (STUN only), automated email in all environments.
+  \item \textbf{In scope:} Interview lifecycle, monitoring, WebRTC signaling relay, reports, verification (Cloudinary photo + voice), attention proxying.
+  \item \textbf{Out of scope / partial:} Lip-sync anti-spoofing (mouth-open ratio only), TURN required for restrictive NATs (configurable via frontend env).
 \end{itemize}
+
+\section{Architectural Non-Goals}
+Python is \textbf{not} an HTTP API layer. There is no FastAPI/Flask/Uvicorn/Gunicorn application server in the current runtime. ML workers are long-lived processes spawned by Express.
 
 %==============================================================================
 \chapter{High-Level Architecture}
@@ -87,19 +93,23 @@ Traditional video interviews (Zoom, Meet) do not provide automated proctoring: r
 \textbf{Component} & \textbf{Responsibility} & \textbf{Port} & \textbf{Hosting} \\
 \midrule
 Frontend SPA & UI, monitoring loops, WebRTC client & 5173 / HTTPS & Vercel \\
-Backend API & REST, WebSocket signaling, CV/identity/YOLO & 8000 & VPS / Oracle VM \\
-Attention service & MediaPipe landmarks, Resemblyzer voice & 8001 & VPS / Oracle VM \\
-PostgreSQL & Users, interviews, violations, voiceprints & 5432 & Supabase \\
+Main Express & REST, WS signaling, Cloudinary, CV proxy to Vision Worker, attention/voice proxy & 8000 & Local / container / tunnel origin \\
+Attention Express & Attention analyze + voice register/verify APIs & 8001 & Local / container (not public) \\
+Vision Worker & OpenCV / DeepFace / YOLO (NDJSON) & Internal & Spawned by Main Express \\
+Attention Worker & MediaPipe / Resemblyzer (NDJSON) & Internal & Spawned by Attention Express \\
+PostgreSQL & Users, interviews, violations, tokens, voiceprints & 5432 / pooler & Supabase \\
+Cloudinary & Verification JPEG storage & HTTPS & Cloud \\
+Cloudflare Tunnel & Optional public HTTPS/WSS to Main Express only & --- & Ephemeral / named tunnel \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \section{Traffic Separation}
 \begin{itemize}
-  \item \textbf{Media plane:} WebRTC peer-to-peer (UDP/TCP negotiated by ICE). Never stored on server.
-  \item \textbf{Control plane:} WebSocket JSON (SDP, ICE, monitoring events).
-  \item \textbf{Inference plane:} HTTP multipart JPEG/WebM uploads from student browser to backend and attention service.
-  \item \textbf{Persistence plane:} SQL writes for violations, participants, voiceprints.
+  \item \textbf{Media plane:} WebRTC peer-to-peer (UDP/TCP negotiated by ICE). Never stored on server; never routed through Express or Cloudflare as media.
+  \item \textbf{Control plane:} WebSocket JSON (SDP, ICE, monitoring events) on Main Express.
+  \item \textbf{Inference plane:} Browser $\rightarrow$ Main Express REST (multipart). Vision path uses Vision Worker NDJSON. Attention/voice path is proxied to Attention Express $\rightarrow$ Attention Worker.
+  \item \textbf{Persistence plane:} Prisma $\rightarrow$ PostgreSQL; verification photos $\rightarrow$ Cloudinary \texttt{secure\_url} on participants.
 \end{itemize}
 
 \section{Architecture Diagram}
@@ -107,25 +117,33 @@ PostgreSQL & Users, interviews, violations, voiceprints & 5432 & Supabase \\
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-  scale=0.92, transform shape,
-  box/.style={draw, rounded corners, align=center, minimum width=2.6cm, minimum height=0.85cm, font=\footnotesize},
+  scale=0.88, transform shape,
+  box/.style={draw, rounded corners, align=center, minimum width=2.5cm, minimum height=0.8cm, font=\footnotesize},
   arr/.style={-{Stealth[length=2mm]}, thick}
 ]
   \node[box] (stu) {Student Browser};
-  \node[box, right=1.8cm of stu] (rec) {Recruiter Browser};
-  \node[box, below=1.4cm of stu] (vercel) {Frontend (Vercel)};
-  \node[box, below=of vercel] (api) {Backend :8000};
-  \node[box, right=1.4cm of api] (att) {Attention :8001};
-  \node[box, below=of api] (db) {PostgreSQL};
-  \draw[arr] (stu) -- node[above,font=\scriptsize]{WebRTC} (rec);
-  \draw[arr] (stu) -- (vercel);
-  \draw[arr] (rec) -- (vercel);
-  \draw[arr] (stu) -- node[left,font=\scriptsize]{REST/WS} (api);
-  \draw[arr] (stu) -- node[right,font=\scriptsize]{Attention API} (att);
+  \node[box, right=1.6cm of stu] (rec) {Recruiter Browser};
+  \node[box, below=1.2cm of stu] (fe) {React/Vite (Vercel)};
+  \node[box, below=1.1cm of fe] (cf) {Cloudflare Tunnel\\(optional)};
+  \node[box, below=1.1cm of cf] (api) {Main Express :8000};
+  \node[box, right=1.3cm of api] (att) {Attention Express :8001};
+  \node[box, below=1.0cm of api] (vw) {Python Vision Worker};
+  \node[box, below=1.0cm of att] (aw) {Python Attention Worker};
+  \node[box, below=1.0cm of vw] (db) {PostgreSQL / Supabase};
+  \node[box, right=1.3cm of db] (cl) {Cloudinary};
+  \draw[arr] (stu) -- node[above,font=\scriptsize]{WebRTC P2P} (rec);
+  \draw[arr] (stu) -- (fe);
+  \draw[arr] (rec) -- (fe);
+  \draw[arr] (fe) -- node[left,font=\scriptsize]{HTTPS/WSS} (cf);
+  \draw[arr] (cf) -- (api);
+  \draw[arr] (api) -- node[above,font=\scriptsize]{proxy} (att);
+  \draw[arr] (api) -- node[left,font=\scriptsize]{NDJSON} (vw);
+  \draw[arr] (att) -- node[right,font=\scriptsize]{NDJSON} (aw);
   \draw[arr] (api) -- (db);
   \draw[arr] (att) -- (db);
+  \draw[arr] (api) -- (cl);
 \end{tikzpicture}
-\caption{Logical deployment. Only signaling and API traffic hit the backend; video is peer-to-peer.}
+\caption{Logical deployment. Browsers call Main Express only. Video remains peer-to-peer. Python workers are not HTTP servers.}
 \end{figure}
 
 %==============================================================================
@@ -134,22 +152,25 @@ PostgreSQL & Users, interviews, violations, voiceprints & 5432 & Supabase \\
 
 \begin{verbatim}
 HIRELENS/
-  frontend/src/
-    pages/Student/     JoinInterview, VerificationPage, StudentInterviewRoom
-    pages/Recruiter/   CreateInterview, RecruiterInterviewRoom, ...
-    hooks/             useWebRTC.js, useMonitoring.js
-    services/          api.js, interviewService.js, monitoringService.js
-    utils/violations.js   Integrity engine (client-side)
-  backend/app/
-    api/               interview, participant, violation, signaling, auth, ...
-    services/          face_detector, object_detector, face_verification, ...
-    models/            SQLAlchemy ORM models
-    migrations/        SQL migration files
-  attention_service/
-    services/          face_landmarker_service, voice_verifier, ...
-    models/            face_landmarker.task (TFLite asset)
-  deploy/              oracle-vm-setup.sh, nginx, systemd units
-  docs/                Documentation and this report
+  frontend/                 React + Vite + Redux SPA
+    src/pages/              Auth, Student, Recruiter, Reports
+    src/hooks/              useWebRTC.js, useMonitoring.js
+    src/services/           api.js, monitoringService.js, webrtcService.js
+    src/utils/violations.js Integrity engine (client-side)
+  backend-node/             Main Express API + WS + Vision Worker
+    src/routes/             auth, interviews, cv, identity, object-detection, ...
+    src/ws/signaling.js     WebSocket signaling relay
+    src/ml/                 NDJSON Vision Worker client
+    prisma/schema.prisma
+    python_vision_worker/   worker.py, OpenCV/DeepFace/YOLO, yolov8n.pt
+  attention-node/           Attention Express + Attention Worker
+    src/routes/             attention.js, voice.js
+    src/ml/                 NDJSON Attention Worker client
+    prisma/schema.prisma
+    python_attention_worker/ worker.py, MediaPipe, Resemblyzer
+  deploy/                   Cloudflare Tunnel helpers
+  docs/                     Documentation and this report
+  MIGRATION_EXPRESS.md      Migration notes (historical)
 \end{verbatim}
 
 %==============================================================================
@@ -158,17 +179,20 @@ HIRELENS/
 
 \begin{table}[H]
 \centering
-\caption{Major dependencies (representative versions from requirements)}
+\caption{Major dependencies (current architecture)}
 \small
 \begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule
 \textbf{Layer} & \textbf{Libraries / tools} \\
 \midrule
-Frontend & React 19, Vite, Redux Toolkit, Axios, React Router, Tailwind, Framer Motion, jsPDF \\
-Backend API & FastAPI 0.137, Uvicorn/Gunicorn, SQLAlchemy 2.x, python-jose, bcrypt, psycopg2 \\
-Backend ML & OpenCV, MediaPipe 0.10+, DeepFace (FaceNet), Ultralytics YOLOv8, TensorFlow 2.x \\
-Attention ML & MediaPipe Tasks Face Landmarker (TFLite), Resemblyzer, PyTorch 2.x, NumPy \\
-Infrastructure & Nginx reverse proxy, systemd services, Supabase PostgreSQL \\
+Frontend & React, Vite, Redux Toolkit, Axios, React Router, Tailwind, WebRTC, jsPDF \\
+Main API & Node.js, Express, Prisma, \texttt{jsonwebtoken}, \texttt{ws}, Multer, Cloudinary SDK, Nodemailer \\
+Attention API & Node.js, Express, Prisma, JWT (shared \texttt{SECRET\_KEY}) \\
+Vision ML & Python worker --- OpenCV, DeepFace (FaceNet), Ultralytics YOLOv8, TF/PyTorch as required \\
+Attention ML & Python worker --- MediaPipe Face Landmarker, Resemblyzer, OpenCV, PyTorch \\
+Worker bridge & \texttt{child\_process.spawn}, stdin/stdout, NDJSON request/response \\
+Storage & PostgreSQL (Supabase) via Prisma; Cloudinary for verification images \\
+Public edge & Cloudflare Tunnel ($\rightarrow$ Main Express :8000 only) \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -179,21 +203,24 @@ Infrastructure & Nginx reverse proxy, systemd services, Supabase PostgreSQL \\
 
 \section{Token Model}
 \begin{itemize}
-  \item \textbf{Access token} (JWT): default 15 minutes. Payload: \texttt{sub} (user UUID), \texttt{role}, \texttt{type=access}.
-  \item \textbf{Refresh token}: stored hashed in \texttt{refresh\_tokens}; rotated on \texttt{POST /auth/refresh}.
+  \item \textbf{Access token} (JWT): default 120 minutes (\texttt{ACCESS\_TOKEN\_EXPIRE\_MINUTES}). Payload: \texttt{sub} (user UUID), \texttt{role}, \texttt{type=access}.
+  \item \textbf{Refresh token}: opaque random value; SHA-256 hash stored in \texttt{refresh\_tokens}; rotated on \texttt{POST /auth/refresh}.
+  \item Response shape: \texttt{access\_token}, \texttt{refresh\_token}, \texttt{token\_type: "bearer"}.
   \item Browser storage: \texttt{hirelens\_token}, \texttt{hirelens\_refresh\_token}, \texttt{hirelens\_user}.
 \end{itemize}
 
 \section{Login Flow}
 \begin{enumerate}
   \item Client \texttt{POST /auth/login} with email/password.
-  \item Server verifies bcrypt hash, issues access + refresh tokens.
+  \item Main Express verifies bcrypt hash, issues access + refresh tokens.
   \item \texttt{api.js} interceptor attaches \texttt{Authorization: Bearer} header.
   \item On 401, client attempts refresh; on failure redirects to login.
 \end{enumerate}
 
 \section{WebSocket Authorization}
-Connection URL: \texttt{/ws/interview/\{id\}?role=student|recruiter\&token=\{JWT\}}.
+Connection URL: \texttt{/ws/interview/\{id\}?role=student|recruiter}.
+
+Token may be supplied as query \texttt{token}, or as first message \texttt{\{type:"auth", token\}} within 15\,s.
 
 Server validates:
 \begin{itemize}
@@ -226,12 +253,15 @@ WebSocket room & If owner & If participant \\
 \chapter{Database Design}
 %==============================================================================
 
+\section{ORM and Provider}
+Prisma Client maps to PostgreSQL (typically Supabase). Both \texttt{backend-node} and \texttt{attention-node} share the same database URL; attention-node uses a subset schema for JWT user checks, participants, and voiceprints.
+
 \section{Entity Relationships}
 \begin{itemize}
   \item \texttt{users} (1) $\rightarrow$ (N) \texttt{interviews} as recruiter.
   \item \texttt{interviews} (1) $\rightarrow$ (N) \texttt{participants}, \texttt{violations}.
-  \item \texttt{participants} links \texttt{student\_id} to \texttt{interview\_id}.
-  \item \texttt{voiceprints} keyed by \texttt{candidate\_id} (interview UUID string).
+  \item \texttt{participants} links \texttt{student\_id} to \texttt{interview\_id}; \texttt{verification\_photo} stores Cloudinary \texttt{secure\_url}.
+  \item \texttt{voiceprints} keyed by \texttt{candidate\_id}.
 \end{itemize}
 
 \section{Table Definitions}
@@ -246,19 +276,36 @@ WebSocket room & If owner & If participant \\
 \midrule
 \texttt{users} & id, name, email, password\_hash, role \\
 \texttt{interviews} & id, title, recruiter\_id, status, completed\_at, start/end\_time \\
-\texttt{participants} & id, interview\_id, student\_id, joined\_at \\
+\texttt{participants} & id, interview\_id, student\_id, verification\_photo, joined\_at \\
 \texttt{violations} & id, interview\_id, student\_id, type, duration, confidence, timestamp \\
-\texttt{voiceprints} & candidate\_id (PK), embedding (JSONB), timestamps \\
+\texttt{voiceprints} & candidate\_id (unique), embedding (JSON), timestamps \\
 \texttt{refresh\_tokens} & id, user\_id, token\_hash, expires\_at, revoked \\
+\texttt{password\_reset\_tokens} & id, user\_id, token\_hash, expires\_at, used \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Migrations applied automatically at backend startup from \texttt{backend/migrations/}.
+Prisma client generation: \texttt{npx prisma generate}. Schema pull (optional): \texttt{npx prisma db pull}.
 
 %==============================================================================
-\chapter{Backend API Reference}
+\chapter{Cloudinary Verification Storage}
 %==============================================================================
+
+Verification images are uploaded to Cloudinary (not permanent local disk storage).
+
+\begin{itemize}
+  \item Folder variable: \texttt{CLOUDINARY\_FOLDER} (default \texttt{hirelens\_images}).
+  \item Public ID: \texttt{\$\{CLOUDINARY\_FOLDER\}/verification/\{candidateId\}}.
+  \item Upload uses overwrite + invalidate; response \texttt{secure\_url} saved on participant.
+  \item Identity verification may download the remote URL temporarily for DeepFace comparison.
+  \item Interview cleanup destroys Cloudinary assets using the deterministic public ID.
+\end{itemize}
+
+%==============================================================================
+\chapter{Backend API Reference (Main Express :8000)}
+%==============================================================================
+
+Base health: \texttt{GET /} $\rightarrow$ \texttt{\{"message":"InterviewAI Backend Running"\}}.
 
 \section{Authentication Endpoints}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
@@ -282,18 +329,27 @@ Migrations applied automatically at backend startup from \texttt{backend/migrati
 \texttt{GET /interviews/\{id\}/join-preview} & Pre-join safe fields (student) \\
 \texttt{POST /interviews/\{id\}/join} & Insert participant (student) \\
 \texttt{PATCH /interviews/\{id\}/complete} & Lock interview; broadcast WS \\
-\texttt{DELETE /interviews/\{id\}} & Cascade delete + cleanup \\
+\texttt{DELETE /interviews/\{id\}} & Cascade delete + Cloudinary/voice cleanup \\
 \texttt{GET /interviews/\{id\}/participants} & List participants \\
 \bottomrule
 \end{tabularx}
 
-\section{Computer Vision Endpoints}
+\section{Computer Vision / Verification Endpoints}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule
-\texttt{POST /cv/check-face} & Haar cascade face count \\
-\texttt{POST /identity/verify-identity} & DeepFace FaceNet match \\
-\texttt{POST /object-detection/check} & YOLOv8n object detection \\
-\texttt{POST /verification/upload} & Store reference photo \\
+\texttt{POST /cv/check-face} & Face count via Vision Worker \\
+\texttt{POST /identity/verify-identity} & DeepFace FaceNet match via Vision Worker \\
+\texttt{POST /object-detection/check} & YOLOv8n object detection via Vision Worker \\
+\texttt{POST /verification/upload} & Upload reference photo to Cloudinary \\
+\bottomrule
+\end{tabularx}
+
+\section{Attention / Voice Proxy (public surface on Main)}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\texttt{POST /attention/analyze} & Proxy multipart frame $\rightarrow$ Attention Express \\
+\texttt{POST /voice/register} & Proxy audio + Authorization $\rightarrow$ Attention Express \\
+\texttt{POST /voice/verify} & Proxy audio + Authorization $\rightarrow$ Attention Express \\
 \bottomrule
 \end{tabularx}
 
@@ -305,23 +361,45 @@ Migrations applied automatically at backend startup from \texttt{backend/migrati
 \texttt{GET /reports/} & Recruiter report list \\
 \texttt{GET /reports/\{id\}} & Report with event timeline \\
 \texttt{POST /reports/generate/\{id\}} & Generate report snapshot \\
+\texttt{GET /candidates/} & Recruiter candidate rollup \\
 \bottomrule
 \end{tabularx}
 
 %==============================================================================
-\chapter{Attention Service API}
+\chapter{Attention Service API (Attention Express :8001)}
 %==============================================================================
+
+Attention Express is local/internal. The frontend should call Main Express; Main proxies attention/voice.
 
 \begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule
+\texttt{GET /} & Health banner \\
 \texttt{POST /attention/analyze} & Full landmark + attention pipeline on JPEG \\
 \texttt{POST /voice/register} & JWT student; store embedding in DB \\
 \texttt{POST /voice/verify} & Compare live audio to stored embedding \\
-\texttt{DELETE /voice/\{candidate\_id\}} & Remove voiceprint (interview delete) \\
+\texttt{DELETE /voice/\{candidate\_id\}} & Remove voiceprint (cleanup helper) \\
 \bottomrule
 \end{tabularx}
 
-\textbf{Startup:} Lazy model loading; \texttt{lifespan} warms Face Landmarker and VoiceEncoder; failures log Python tracebacks.
+\textbf{Startup:} Express spawns the Python Attention Worker; models stay loaded in the worker process.
+
+%==============================================================================
+\chapter{Python ML Workers}
+%==============================================================================
+
+\section{Communication Pattern}
+\begin{verbatim}
+Express  --spawn-->  python worker.py
+         --stdin-->  {"id":"...","op":"...","payload":{...}}\n
+         <--stdout-  {"id":"...","ok":true,"result":{...}}\n
+\end{verbatim}
+Logs go to stderr. This is \textbf{not} an HTTP Python server.
+
+\section{Vision Worker (\texttt{backend-node/python\_vision\_worker})}
+Ops: \texttt{count\_faces}, \texttt{verify\_faces}, \texttt{detect\_objects}, \texttt{ping}, \texttt{shutdown}.
+
+\section{Attention Worker (\texttt{attention-node/python\_attention\_worker})}
+Ops: \texttt{analyze}, \texttt{embed}, \texttt{ping}, \texttt{shutdown}.
 
 %==============================================================================
 \chapter{WebRTC and Signaling Protocol}
@@ -329,11 +407,11 @@ Migrations applied automatically at backend startup from \texttt{backend/migrati
 
 \section{Peer Connection Establishment}
 \begin{enumerate}
-  \item Both peers connect WebSocket with JWT.
+  \item Both peers acquire local media (\texttt{getUserMedia}), then connect WebSocket with JWT auth.
   \item Server sends \texttt{room-joined} with participant list.
-  \item When student present, recruiter calls \texttt{createOffer()}.
+  \item Recruiter creates offer \textbf{after} local tracks are added; student answers with local tracks attached.
   \item \texttt{offer} $\rightarrow$ student \texttt{answer} $\rightarrow$ ICE candidates exchanged.
-  \item \texttt{ontrack} receives remote MediaStream for video elements.
+  \item \texttt{ontrack} receives remote tracks (including when \texttt{e.streams} is empty) for video elements.
 \end{enumerate}
 
 \section{Relayed WebSocket Message Types}
@@ -345,17 +423,18 @@ Migrations applied automatically at backend startup from \texttt{backend/migrati
 \toprule
 \textbf{Type} & \textbf{Purpose} \\
 \midrule
-\texttt{offer}, \texttt{answer}, \texttt{ice-candidate} & WebRTC signaling \\
+\texttt{offer}, \texttt{answer}, \texttt{ice-candidate}, \texttt{request-offer} & WebRTC signaling \\
 \texttt{monitoring-event} & Violation event JSON to recruiter \\
 \texttt{status-update} & Live monitoring badge updates \\
 \texttt{room-joined}, \texttt{peer-joined}, \texttt{peer-left} & Presence \\
 \texttt{interview-completed} & Session teardown message \\
+\texttt{auth}, \texttt{auth-error} & Post-connect JWT auth \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \section{ICE Configuration}
-Google STUN: \texttt{stun:stun.l.google.com:19302}. Production may require TURN for restrictive NAT.
+STUN: Google public STUN servers. Production across networks should configure TURN via \texttt{VITE\_TURN\_URLS}, \texttt{VITE\_TURN\_USERNAME}, \texttt{VITE\_TURN\_CREDENTIAL}.
 
 \section{Local Media Controls}
 \texttt{MediaStreamTrack.enabled = false} mutes camera/mic without closing PeerConnection.
@@ -364,7 +443,7 @@ Google STUN: \texttt{stun:stun.l.google.com:19302}. Production may require TURN 
 \chapter{Machine Learning Models --- Detailed Specification}
 %==============================================================================
 
-This chapter documents each model: mathematical basis, implementation file, inference steps, thresholds, and violation mapping.
+This chapter documents each model: mathematical basis, implementation location, inference steps, thresholds, and violation mapping.
 
 %------------------------------------------------------------------------------
 \section{OpenCV Haar Cascade Face Detector}
@@ -374,18 +453,18 @@ This chapter documents each model: mathematical basis, implementation file, infe
 Viola--Jones (2001) uses AdaBoost-trained Haar-like features with a cascade of weak classifiers for fast frontal-face detection. It is classical computer vision (not deep learning): integral images enable real-time scanning at multiple scales.
 
 \subsection{Implementation}
-\texttt{backend/app/services/face\_detector.py}, cascade file \texttt{haarcascade\_frontalface\_default.xml}.
+\texttt{backend-node/python\_vision\_worker/face\_detector.py}, cascade via OpenCV data files.
 
 \subsection{Algorithm}
 \begin{enumerate}
   \item Decode uploaded JPEG to BGR matrix.
   \item Grayscale conversion.
-  \item \texttt{detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30,30))}.
-  \item Return bounding box count.
+  \item \texttt{detectMultiScale(...)} face count.
+  \item Return bounding box count to Express via NDJSON.
 \end{enumerate}
 
 \subsection{API Mapping}
-\texttt{POST /cv/check-face} returns \texttt{status}: \texttt{NO\_FACE} (0), \texttt{FACE\_PRESENT} (1), \texttt{MULTIPLE\_FACE} ($\geq 2$). Frontend reports \texttt{MULTIPLE\_PERSON\_FACE} every 2\,s when applicable.
+\texttt{POST /cv/check-face} returns face presence status. Frontend reports \texttt{MULTIPLE\_PERSON\_FACE} every 2\,s when applicable.
 
 \subsection{Limitations}
 Sensitive to pose/lighting; may miss profile faces; can false-positive on patterns. Complemented by YOLO person count.
@@ -398,10 +477,10 @@ Sensitive to pose/lighting; may miss profile faces; can false-positive on patter
 YOLO (You Only Look Once) performs single-pass object detection: the network divides the image into a grid and predicts bounding boxes and class probabilities simultaneously. YOLOv8-nano is the smallest variant, optimized for edge/CPU deployment.
 
 \subsection{Model Asset}
-\texttt{backend/yolov8n.pt} --- COCO-pretrained weights (80 classes).
+\texttt{backend-node/python\_vision\_worker/yolov8n.pt} --- COCO-pretrained weights (80 classes).
 
 \subsection{Implementation}
-\texttt{object\_detector.py}: \texttt{model = YOLO("yolov8n.pt")} at import; \texttt{model(image\_path)} per request.
+\texttt{object\_detector.py} inside the Vision Worker; invoked by op \texttt{detect\_objects}.
 
 \subsection{Detected Classes (HIRELENS mapping)}
 \begin{table}[H]
@@ -438,30 +517,30 @@ FaceNet (Schroff et al., 2015) learns a mapping $f(x) \in \mathbb{R}^{128}$ such
 
 \subsection{Pipeline}
 \begin{enumerate}
-  \item Reference: \texttt{uploads/verification/\{candidate\_id\}.jpg} from verification page.
+  \item Reference: Cloudinary \texttt{secure\_url} on participant (downloaded temporarily).
   \item Live frame saved to temp JPEG.
-  \item \texttt{DeepFace.verify(reference, current)} $\rightarrow$ distance vs threshold $\rightarrow$ \texttt{verified} boolean.
+  \item Vision Worker op \texttt{verify\_faces} $\rightarrow$ DeepFace verify $\rightarrow$ boolean / distance.
 \end{enumerate}
 
 \subsection{Violation}
-\texttt{IDENTITY\_MISMATCH} when \texttt{verified == false}. Loop interval: 4\,s.
+\texttt{IDENTITY\_MISMATCH} when verification fails. Loop interval: 4\,s.
 
 %------------------------------------------------------------------------------
-\section{MediaPipe Face Landmarker (Attention Service)}
+\section{MediaPipe Face Landmarker (Attention Worker)}
 %------------------------------------------------------------------------------
 
 \subsection{Theoretical Background}
 MediaPipe Face Landmarker is a TensorFlow Lite pipeline predicting 478 3D facial landmarks, blendshape coefficients, and a facial transformation matrix (head pose in camera space). Inference uses XNNPACK CPU delegate.
 
 \subsection{Model File}
-\texttt{attention\_service/models/face\_landmarker.task} ($\sim$3.7\,MB).
+\texttt{attention-node/python\_attention\_worker/models/face\_landmarker.task}.
 
 \subsection{Initialization Options}
 \begin{itemize}
   \item \texttt{output\_face\_blendshapes=True}
   \item \texttt{output\_facial\_transformation\_matrixes=True}
   \item \texttt{num\_faces=1}
-  \item Lazy load via \texttt{get\_landmarker()}; warmed in FastAPI lifespan.
+  \item Loaded once inside the persistent Attention Worker process.
 \end{itemize}
 
 \subsection{Sub-pipeline A: Head Pose}
@@ -497,33 +576,27 @@ Eyes closed if EAR $< 0.18$ (landmarks 159, 145, 33, 133).
 \end{itemize}
 
 \subsection{API Response}
-\texttt{POST /attention/analyze} returns landmark count, yaw/pitch, eye direction, EAR, attention flags, mouth ratio. Frontend attention loop: 1\,s.
-
-%------------------------------------------------------------------------------
-\section{MediaPipe Face Mesh (Backend Auxiliary)}
-%------------------------------------------------------------------------------
-
-\texttt{backend/app/services/head\_pose.py} uses legacy Face Mesh (468 landmarks). Nose $x$-coordinate thresholds: $<0.40$ LEFT, $>0.60$ RIGHT. Used in tests/auxiliary paths; primary attention path uses Face Landmarker service.
+\texttt{POST /attention/analyze} (via Main proxy) returns landmark count, yaw/pitch, eye direction, EAR, attention flags, mouth ratio. Frontend attention loop: 1\,s.
 
 %------------------------------------------------------------------------------
 \section{Resemblyzer VoiceEncoder}
 %------------------------------------------------------------------------------
 
 \subsection{Theoretical Background}
-Resemblyzer implements a GE2E (Generalized End-to-End) speaker embedding network. The encoder maps variable-length utterances to a fixed-dimensional unit vector suitable for cosine/dot-product similarity.
+Resemblyzer implements a GE2E (Generalized End-to-End) speaker embedding network. The encoder maps variable-length utterances to a fixed-dimensional unit vector suitable for cosine similarity.
 
 \subsection{Implementation}
-\texttt{voice\_verifier.py}: PyTorch \texttt{VoiceEncoder()}, lazy singleton.
+Attention Worker op \texttt{embed}; Express stores/compares embeddings via Prisma \texttt{voiceprints}.
 
 \subsection{Registration}
 \begin{enumerate}
-  \item \texttt{preprocess\_wav(path)}: resample, normalize volume, trim silence.
-  \item \texttt{embed\_utterance(wav)} $\rightarrow$ vector $\mathbf{e}$.
-  \item Store in \texttt{voiceprints.embedding} (JSONB) keyed by interview/candidate id.
+  \item Preprocess WAV/WebM clip in worker.
+  \item \texttt{embed\_utterance} $\rightarrow$ vector $\mathbf{e}$.
+  \item Store in \texttt{voiceprints.embedding} (JSON) keyed by candidate id.
 \end{enumerate}
 
 \subsection{Verification}
-$\text{similarity} = \mathbf{e}_{\text{stored}} \cdot \mathbf{e}_{\text{live}}$ (dot product on normalized embeddings).
+Cosine similarity between stored and live embeddings.
 
 \subsection{Thresholds}
 \begin{table}[H]
@@ -540,7 +613,7 @@ $< 0.75$ & VOICE\_MISMATCH \\
 \end{table}
 
 \subsection{Monitoring}
-5\,s audio capture (\texttt{VOICE\_RECORD\_MS}), verify every 1\,s cooldown after cycle completes.
+5\,s audio capture (\texttt{VOICE\_RECORD\_MS}), verify with 1\,s cooldown after cycle completes.
 
 %------------------------------------------------------------------------------
 \section{Models Summary}
@@ -552,14 +625,13 @@ $< 0.75$ & VOICE\_MISMATCH \\
 \caption{Consolidated model inventory}
 \begin{tabularx}{\textwidth}{@{}llll@{}}
 \toprule
-\textbf{Model} & \textbf{Type} & \textbf{Service} & \textbf{Output} \\
+\textbf{Model} & \textbf{Type} & \textbf{Runtime} & \textbf{Output} \\
 \midrule
-Haar Cascade & Classical CV & Backend & Face count \\
-YOLOv8n & CNN detector & Backend & COCO classes \\
-FaceNet & Deep embedding & Backend & Identity match \\
-Face Landmarker & TFLite landmarks & Attention & Pose, gaze, EAR \\
-Face Mesh & MediaPipe & Backend aux & Head direction \\
-VoiceEncoder & PyTorch GE2E & Attention & Speaker embedding \\
+Haar Cascade & Classical CV & Vision Worker & Face count \\
+YOLOv8n & CNN detector & Vision Worker & COCO classes \\
+FaceNet & Deep embedding & Vision Worker & Identity match \\
+Face Landmarker & TFLite landmarks & Attention Worker & Pose, gaze, EAR \\
+VoiceEncoder & PyTorch GE2E & Attention Worker & Speaker embedding \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -569,20 +641,20 @@ VoiceEncoder & PyTorch GE2E & Attention & Speaker embedding \\
 %==============================================================================
 
 \section{Loop Scheduling}
-Five independent async loops in \texttt{useMonitoring.js}; each awaits completion before sleeping.
+Five independent async loops in \texttt{useMonitoring.js}; each awaits completion before sleeping. All HTTP calls use Main Express (\texttt{VITE\_API\_BASE\_URL}); attention/voice are proxied.
 
 \begin{table}[H]
 \centering
 \caption{Monitoring loop parameters}
 \begin{tabular}{@{}llll@{}}
 \toprule
-\textbf{Loop} & \textbf{Interval} & \textbf{Endpoint} & \textbf{Auth} \\
+\textbf{Loop} & \textbf{Interval} & \textbf{Endpoint (Main Express)} & \textbf{Auth} \\
 \midrule
-Attention & 1\,s & Attention /attention/analyze & JWT on attention client \\
-Face & 2\,s & Backend /cv/check-face & JWT \\
-Object & 3\,s & Backend /object-detection/check & JWT \\
-Identity & 4\,s & Backend /identity/verify-identity & JWT \\
-Voice & 1\,s cooldown & Attention /voice/verify & JWT \\
+Attention & 1\,s & /attention/analyze & Public multipart (proxied) \\
+Face & 2\,s & /cv/check-face & JWT \\
+Object & 3\,s & /object-detection/check & JWT \\
+Identity & 4\,s & /identity/verify-identity & JWT \\
+Voice & 5\,s clip + 1\,s cooldown & /voice/verify & JWT \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -671,19 +743,27 @@ Let $c_i$ be deduplicated count for category $i$, $w_i$ its weight:
 
 \section{Route Map}
 \begin{itemize}
-  \item Public: \texttt{/}, \texttt{/login}, \texttt{/register}
-  \item Student: \texttt{/student/join}, \texttt{/student/interview/:id/verify}, \texttt{/student/interview/:id}
-  \item Recruiter: \texttt{/recruiter/create}, \texttt{/recruiter/interview/:id}, \texttt{/recruiter/reports/:id}
+  \item Public: \texttt{/}, \texttt{/login}, \texttt{/register}, \texttt{/forgot-password}, \texttt{/reset-password}
+  \item Student: \texttt{/student/dashboard}, \texttt{/student/join}, \texttt{/student/interview/:id/verify}, \texttt{/student/interview/:id}
+  \item Recruiter: \texttt{/recruiter/dashboard}, \texttt{/recruiter/create}, \texttt{/recruiter/interview/:id}, \texttt{/recruiter/reports/:id}
 \end{itemize}
 
 \section{Redux Slices}
 \texttt{authSlice}, \texttt{interviewSlice}, \texttt{monitoringSlice} (liveEvents, statuses, warnings), \texttt{reportSlice}.
 
+\section{API Configuration}
+\begin{verbatim}
+VITE_API_BASE_URL=https://<main-express-or-tunnel>
+VITE_WS_BASE_URL=wss://<main-express-or-tunnel>
+VITE_USE_MOCK=false
+\end{verbatim}
+\texttt{VITE\_ATTENTION\_SERVICE\_URL} may exist for legacy/local tooling; monitoring call sites use Main Express.
+
 \section{Recruiter Interview Room Components}
 \texttt{VideoStream} (candidate + self), \texttt{ViolationTimeline}, \texttt{ViolationDashboard}, \texttt{IntegrityDashboard}, \texttt{MonitoringPanel}, \texttt{RecruiterInterviewControls} (camera/mic/end/report).
 
 \section{Student Interview Room}
-Pre-start lobby $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. \texttt{FullscreenExitOverlay} blocks UI until fullscreen restored.
+Pre-start lobby (local + remote preview) $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. \texttt{FullscreenExitOverlay} blocks UI until fullscreen restored.
 
 %==============================================================================
 \chapter{End-to-End User Flows}
@@ -695,7 +775,7 @@ Pre-start lobby $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. 
   \item Create interview (\texttt{POST /interviews/}) with title, schedule.
   \item Share interview UUID with student.
   \item Open \texttt{/recruiter/interview/\{id\}}.
-  \item WebSocket connects; wait for student peer.
+  \item WebSocket connects; wait for student peer; WebRTC media P2P.
   \item Observe live violations, integrity score, monitoring badges.
   \item Optional: generate report; end session or mark complete.
 \end{enumerate}
@@ -704,7 +784,7 @@ Pre-start lobby $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. 
 \begin{enumerate}
   \item Register/login as student.
   \item Join page: enter interview ID $\rightarrow$ \texttt{join-preview} validates $\rightarrow$ \texttt{POST join}.
-  \item Verification: upload reference photo + register voice (attention service).
+  \item Verification: upload reference photo (Cloudinary) + register voice (via Main proxy).
   \item Interview room: start $\rightarrow$ fullscreen $\rightarrow$ WebRTC + monitoring loops.
   \item Tab switch terminates interview; fullscreen exit shows recovery dialog.
   \item Violations recorded silently; recruiter sees all alerts.
@@ -717,9 +797,20 @@ Pre-start lobby $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. 
 \section{Recommended Production Topology}
 \begin{itemize}
   \item Frontend: Vercel, root \texttt{frontend/}, env \texttt{VITE\_*}.
-  \item Database: Supabase PostgreSQL.
-  \item Backend + Attention: Ubuntu VPS (4--8\,GB RAM minimum), Nginx reverse proxy, systemd services from \texttt{deploy/}.
+  \item Database: Supabase PostgreSQL (prefer pooler + \texttt{sslmode=require} when direct IPv6 is unavailable).
+  \item Main Express + Vision Worker: container/VPS (\texttt{backend-node/Dockerfile}).
+  \item Attention Express + Attention Worker: container/VPS (\texttt{attention-node/Dockerfile}), reachable only by Main via \texttt{ATTENTION\_SERVICE\_URL}.
+  \item Optional public demos: Cloudflare Tunnel $\rightarrow$ \texttt{http://127.0.0.1:8000} only (never tunnel :8001).
+  \item Media storage: Cloudinary (\texttt{CLOUDINARY\_*}).
 \end{itemize}
+
+\section{Cloudflare Tunnel}
+\begin{verbatim}
+Internet → Cloudflare Tunnel → Main Express :8000
+                ↓ (local)
+         Attention Express :8001 → Python workers
+\end{verbatim}
+Quick tunnels issue ephemeral \texttt{*.trycloudflare.com} hostnames. REST uses \texttt{https://}; WebSocket uses \texttt{wss://}.
 
 \section{Environment Variables}
 
@@ -730,13 +821,17 @@ Pre-start lobby $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. 
 \toprule
 \textbf{Variable} & \textbf{Purpose} \\
 \midrule
-\texttt{DATABASE\_URL} & PostgreSQL connection \\
-\texttt{SECRET\_KEY}, \texttt{ALGORITHM} & JWT signing \\
-\texttt{FRONTEND\_URL} & CORS + password reset links \\
-\texttt{VITE\_API\_BASE\_URL} & Frontend REST base \\
-\texttt{VITE\_ATTENTION\_SERVICE\_URL} & Attention API base \\
-\texttt{VITE\_WS\_BASE\_URL} & WebSocket base (wss in prod) \\
+\texttt{DATABASE\_URL} & PostgreSQL / Supabase (both Express apps) \\
+\texttt{SECRET\_KEY}, \texttt{ALGORITHM} & JWT signing (must match across services) \\
+\texttt{FRONTEND\_URL}, \texttt{CORS\_ORIGINS} & CORS \\
+\texttt{ATTENTION\_SERVICE\_URL} & Main $\rightarrow$ Attention (e.g.\ \texttt{http://127.0.0.1:8001}) \\
+\texttt{CLOUDINARY\_CLOUD\_NAME/API\_KEY/API\_SECRET} & Verification uploads \\
+\texttt{CLOUDINARY\_FOLDER} & Default \texttt{hirelens\_images} \\
+\texttt{PYTHON\_PATH} & Worker venv Python executable \\
+\texttt{VITE\_API\_BASE\_URL} & Frontend REST base (Main Express) \\
+\texttt{VITE\_WS\_BASE\_URL} & WebSocket base (\texttt{wss} in prod) \\
 \texttt{VITE\_USE\_MOCK} & Must be \texttt{false} in production \\
+\texttt{VITE\_TURN\_*} & Optional TURN for cross-network WebRTC \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -744,22 +839,31 @@ Pre-start lobby $\rightarrow$ fullscreen start $\rightarrow$ monitoring active. 
 \section{HTTPS Requirement}
 Browsers require secure context for \texttt{getUserMedia}, fullscreen API, and reliable WebRTC in production.
 
+\section{Local Development Commands}
+\begin{verbatim}
+cd attention-node && npm install && npx prisma generate && npm start
+cd backend-node  && npm install && npx prisma generate && npm start
+cd frontend      && npm install && npm run dev
+\end{verbatim}
+Express automatically spawns the corresponding Python worker. Do not start a Python HTTP server.
+
 %==============================================================================
 \chapter{Conclusion and Future Work}
 %==============================================================================
 
-HIRELENS combines classical CV, object detection, deep face verification, dense facial landmarks, and speaker embeddings in a unified browser-orchestrated monitoring pipeline with peer-to-peer video and centralized audit storage.
+HIRELENS combines classical CV, object detection, deep face verification, dense facial landmarks, and speaker embeddings in a unified browser-orchestrated monitoring pipeline with peer-to-peer video and centralized audit storage. HTTP and signaling run on Express; ML inference runs in persistent Python workers over NDJSON.
 
 \subsection{Known Limitations}
 \begin{itemize}
   \item No true lip-sync anti-spoofing model.
   \item STUN-only WebRTC may fail on some networks (TURN needed).
-  \item Server RAM requirements high for concurrent ML inference.
+  \item Server RAM/disk requirements high for concurrent ML inference.
   \item Haar + YOLO may produce correlated multiple-person signals (mitigated by de-duplication).
+  \item Supabase direct \texttt{db.*.supabase.co:5432} may be IPv6-only; pooler URLs are often required from IPv4-only clients.
 \end{itemize}
 
 \subsection{Future Enhancements}
-TURN integration, GPU inference, ONNX export for faster cold starts, centralized model registry, lip-sync deep model, recruiter analytics export.
+Stable named Cloudflare tunnels, GPU inference, ONNX export for faster cold starts, centralized model registry, lip-sync deep model, recruiter analytics export.
 
 %==============================================================================
 \appendix
@@ -778,12 +882,17 @@ pdflatex HIRELENS_TECHNICAL_REPORT.tex
   \item \texttt{frontend/src/hooks/useMonitoring.js} --- monitoring loops
   \item \texttt{frontend/src/hooks/useWebRTC.js} --- WebRTC + signaling
   \item \texttt{frontend/src/utils/violations.js} --- integrity engine
-  \item \texttt{backend/app/api/signaling.py} --- WebSocket relay
-  \item \texttt{backend/app/services/object\_detector.py} --- YOLO
-  \item \texttt{backend/app/services/face\_verification.py} --- DeepFace
-  \item \texttt{attention\_service/services/face\_landmarker\_service.py}
-  \item \texttt{attention\_service/services/voice\_verifier.py}
-  \item \texttt{docs/HIRELENS\_DOCUMENTATION.md} --- Markdown companion doc
+  \item \texttt{backend-node/src/ws/signaling.js} --- WebSocket relay
+  \item \texttt{backend-node/src/routes/attentionProxy.js} --- attention/voice proxy
+  \item \texttt{backend-node/src/services/cloudinaryService.js} --- verification storage
+  \item \texttt{backend-node/python\_vision\_worker/worker.py} --- Vision Worker entry
+  \item \texttt{backend-node/python\_vision\_worker/object\_detector.py} --- YOLO
+  \item \texttt{backend-node/python\_vision\_worker/face\_verification.py} --- DeepFace
+  \item \texttt{attention-node/src/routes/attention.js} / \texttt{voice.js}
+  \item \texttt{attention-node/python\_attention\_worker/worker.py} --- Attention Worker entry
+  \item \texttt{attention-node/python\_attention\_worker/face\_landmarker\_service.py}
+  \item \texttt{deploy/CLOUDFLARE\_TUNNEL.md} --- tunnel setup
+  \item \texttt{README.md} --- root technical documentation
 \end{itemize}
 
 \end{document}
