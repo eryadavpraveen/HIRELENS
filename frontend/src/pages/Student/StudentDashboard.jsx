@@ -8,14 +8,12 @@ import { InterviewCard } from '@/components/dashboard/InterviewCard'
 import { Card } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { PageLoader, EmptyState } from '@/components/common/LoadingSpinner'
-import { mockDashboardStats } from '@/utils/mockData'
 import { useAuth } from '@/hooks/useAuth'
 
 export default function StudentDashboard() {
   const dispatch = useDispatch()
   const { interviewList, loading } = useSelector((state) => state.interview)
   const { user } = useAuth()
-  const stats = mockDashboardStats.student
 
   useEffect(() => {
     dispatch(fetchInterviews())
@@ -24,6 +22,7 @@ export default function StudentDashboard() {
   if (loading && interviewList.length === 0) return <PageLoader />
 
   const upcoming = interviewList.filter((i) => i.status !== 'completed')
+  const completedCount = interviewList.filter((i) => i.status === 'completed').length
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -50,9 +49,9 @@ export default function StudentDashboard() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <DashboardCard title="Total Interviews" value={stats.totalInterviews} icon={Calendar} accent="primary" />
-        <DashboardCard title="Upcoming Interviews" value={stats.upcomingInterviews} icon={Clock} accent="accent" />
-        <DashboardCard title="Completed Interviews" value={stats.completedInterviews} icon={CheckCircle} accent="success" />
+        <DashboardCard title="Total Interviews" value={interviewList.length} icon={Calendar} accent="primary" />
+        <DashboardCard title="Upcoming Interviews" value={upcoming.length} icon={Clock} accent="accent" />
+        <DashboardCard title="Completed Interviews" value={completedCount} icon={CheckCircle} accent="success" />
       </div>
 
       <div>

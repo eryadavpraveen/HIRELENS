@@ -4,645 +4,119 @@
 
 **Repository:** [github.com/eryadavpraveen/HIRELENS](https://github.com/eryadavpraveen/HIRELENS)
 
----
-
-## Table of contents
-
-1. [System overview](#1-system-overview)
-2. [Architecture](#2-architecture)
-3. [Repository structure](#3-repository-structure)
-4. [Technology stack](#4-technology-stack)
-5. [Authentication & security](#5-authentication--security)
-6. [Database](#6-database)
-7. [Backend API (port 8000)](#7-backend-api-port-8000)
-8. [Attention service (port 8001)](#8-attention-service-port-8001)
-9. [WebRTC & signaling](#9-webrtc--signaling)
-10. [Monitoring pipeline](#10-monitoring-pipeline)
-11. [Violations & integrity score](#11-violations--integrity-score)
-12. [Frontend application](#12-frontend-application)
-13. [End-to-end user flows](#13-end-to-end-user-flows)
-14. [Environment variables](#14-environment-variables)
-15. [Local development](#15-local-development)
-16. [Deployment](#16-deployment)
-17. [Troubleshooting](#17-troubleshooting)
+> **Active runtime (2026):** Express + Node.js APIs with Python **ML workers only** (no FastAPI / Flask / Uvicorn / Gunicorn HTTP servers).
+> The old `backend/` and `attention_service/` FastAPI apps have been removed.
 
 ---
 
-## 1. System overview
+## Architecture
 
-HIRELENS splits work across **four runtime components**:
-
-| Component | Role | Default port |
-|-----------|------|--------------|
-| **Frontend** | React SPA — recruiter & student UI | 5173 (dev) / Vercel (prod) |
-| **Backend** | FastAPI — REST API, WebSocket signaling, CV/identity/object ML | 8000 |
-| **Attention service** | FastAPI — MediaPipe face landmarks + Resemblyzer voice | 8001 |
-| **PostgreSQL** | Users, interviews, participants, violations, tokens, voiceprints | 5432 (Supabase) |
-
-**Design principles:**
-
-- **Video/audio** flows peer-to-peer via WebRTC (not through the server).
-- **Signaling** (SDP offer/answer, ICE candidates) and **monitoring events** flow through the backend WebSocket relay.
-- **Violation records** are persisted to PostgreSQL via REST; recruiters see live updates via WebSocket relay from the student browser.
-
----
-
-## 2. Architecture
-
-```mermaid
-flowchart TB
-  subgraph Browser["Student browser"]
-    UI[React UI]
-    Mon[useMonitoring loops]
-    RTC[useWebRTC peer connection]
-    UI --> Mon
-    UI --> RTC
-  end
-
-  subgraph BrowserR["Recruiter browser"]
-    RUI[Recruiter dashboard]
-    RRTC[useWebRTC]
-    RUI --> RRTC
-  end
-
-  subgraph Vercel["Frontend hosting"]
-    FE[Static Vite build]
-  end
-
-  subgraph Backend["Backend :8000"]
-    API[REST API]
-    WS[WebSocket signaling]
-    CV[CV / Identity / YOLO]
-  end
-
-  subgraph Attention["Attention service :8001"]
-    MP[MediaPipe FaceLandmarker]
-    Voice[Resemblyzer VoiceEncoder]
-  end
-
-  subgraph DB["Supabase PostgreSQL"]
-    PG[(PostgreSQL)]
-  end
-
-  FE --> UI
-  FE --> RUI
-  Mon --> API
-  Mon --> Attention
-  Mon --> WS
-  RTC <-->|WebRTC P2P media| RRTC
-  RTC --> WS
-  RRTC --> WS
-  API --> PG
-  WS --> PG
-  Voice --> PG
+```text
+React (Vite)
+  ↓
+Main Express + Node.js (:8000)
+  ├── PostgreSQL / Supabase (Prisma)
+  ├── Cloudinary (verification photos)
+  ├── Python Vision Worker (OpenCV / DeepFace / YOLO via NDJSON)
+  └── Express Attention Service (:8001)  ← local only; proxied by Main
+         └── Python Attention Worker (MediaPipe / Resemblyzer via NDJSON)
 ```
 
-**Request paths during a live interview:**
+Optional public exposure:
 
-1. Student webcam frames → backend (`/cv`, `/identity`, `/object-detection`) and attention service (`/attention/analyze`).
-2. Student audio chunks → attention service (`/voice/verify`).
-3. Detected events → `violationService.record()` (REST) + `sendMessage({ type: 'monitoring-event' })` (WebSocket).
-4. Recruiter receives events via WebSocket → Redux `monitoringSlice` → dashboards.
-5. Student and recruiter video → direct WebRTC; server only relays SDP/ICE.
+```text
+Internet → Cloudflare Tunnel → http://127.0.0.1:8000 (Main Express only)
+```
+
+Do **not** tunnel port `8001` or the Python workers.
 
 ---
 
-## 3. Repository structure
+## Repository structure
 
 ```
 HIRELENS/
 ├── frontend/                 # React + Vite + Redux
+├── backend-node/             # Main Express API + WS + Vision Worker
 │   ├── src/
-│   │   ├── pages/            # Student, Recruiter, Auth, Reports
-│   │   ├── hooks/            # useWebRTC, useMonitoring, useAuth
-│   │   ├── services/         # api, interview, monitoring, webrtc
-│   │   ├── features/         # Redux slices
-│   │   └── utils/            # violations.js (integrity engine)
-│   └── vercel.json           # Vercel deploy config
-├── backend/                  # Main FastAPI application
-│   ├── app/
-│   │   ├── api/              # Route handlers
-│   │   ├── auth/             # JWT, dependencies
-│   │   ├── models/           # SQLAlchemy models
-│   │   ├── services/         # ML + business logic
-│   │   └── database/         # Engine, migrations runner
-│   └── migrations/           # SQL migrations + manifest
-├── attention_service/        # MediaPipe + voice microservice
-│   ├── services/             # face_landmarker, voice_verifier, etc.
-│   ├── routers/              # voice_router
-│   └── models/               # face_landmarker.task
-├── deploy/                   # Oracle/VPS setup scripts
-│   ├── oracle-vm-setup.sh
-│   ├── nginx-hirelens.conf
-│   └── render.yaml
-└── docs/
-    └── HIRELENS_DOCUMENTATION.md  # this file
+│   ├── prisma/
+│   └── python_vision_worker/ # ML worker (+ yolov8n.pt)
+├── attention-node/           # Attention Express + Attention Worker
+│   ├── src/
+│   ├── prisma/
+│   └── python_attention_worker/  # ML worker (+ face_landmarker.task)
+├── deploy/                   # Cloudflare Tunnel helpers only
+│   ├── CLOUDFLARE_TUNNEL.md
+│   ├── start-tunnel.ps1
+│   └── cloudflare/
+└── MIGRATION_EXPRESS.md      # Migration notes
 ```
 
 ---
 
-## 4. Technology stack
+## Technology stack
 
 | Layer | Technologies |
 |-------|----------------|
-| Frontend | React 19, Vite, Redux Toolkit, React Router, Tailwind, Framer Motion, Axios, WebRTC |
-| Backend API | FastAPI, Uvicorn/Gunicorn, SQLAlchemy, python-jose (JWT), bcrypt |
-| Backend ML | OpenCV, MediaPipe, DeepFace, face_recognition, Ultralytics YOLO, TensorFlow |
-| Attention service | MediaPipe Tasks (Face Landmarker), Resemblyzer, PyTorch, SQLAlchemy |
+| Frontend | React, Vite, Redux Toolkit, Tailwind, Axios, WebRTC |
+| Main API | Express.js, Prisma, JWT, Cloudinary, `ws` |
+| Attention API | Express.js, Prisma, JWT |
+| Vision ML | Python worker — OpenCV, DeepFace, Ultralytics YOLO, TensorFlow/PyTorch |
+| Attention ML | Python worker — MediaPipe, Resemblyzer, PyTorch |
 | Database | PostgreSQL (Supabase) |
-| Real-time | WebSocket (FastAPI), WebRTC (browser) |
+| Tunnel | Cloudflare `cloudflared` → Main Express `:8000` |
+
+Python is used **only** for ML workers (stdin/stdout NDJSON). No Python web framework serves HTTP in production.
 
 ---
 
-## 5. Authentication & security
+## Local development
 
-### 5.1 Registration & login
-
-- **Register:** `POST /auth/register` — roles: `student` | `recruiter`.
-- **Login:** `POST /auth/login` — returns `access_token` + `refresh_token`.
-- **Refresh:** `POST /auth/refresh` — rotates refresh token.
-- **Logout:** `POST /auth/logout` — revokes refresh token.
-- **Me:** `GET /auth/me` — current user (JWT required).
-
-Tokens are stored in `localStorage`:
-
-- `hirelens_token` — access JWT (short-lived, default 15 min).
-- `hirelens_refresh_token` — refresh token (default 30 days).
-
-`frontend/src/services/api.js` attaches the access token to requests and auto-refreshes on 401.
-
-### 5.2 JWT contents
-
-Access token payload includes:
-
-- `sub` — user UUID
-- `role` — `student` | `recruiter`
-- `type` — `access`
-
-WebSocket connections authenticate via query param: `?token=<access_jwt>` (see `webrtcService.signalingUrl`).
-
-### 5.3 Authorization rules (interviews)
-
-| Action | Recruiter | Student |
-|--------|-----------|---------|
-| Create interview | Own account | — |
-| List interviews | Own interviews | Joined interviews only |
-| Get interview by ID | Owner | Participant only (after join) |
-| Join preview (pre-join) | — | `GET /interviews/{id}/join-preview` |
-| Join interview | — | `POST /interviews/{id}/join` |
-| Complete interview | Owner, any reason | Participant, `TAB_SWITCH` only |
-| Delete interview | Owner | — |
-| View violations | Scoped by interview ownership / participation |
-
-### 5.4 Password reset
-
-- `POST /auth/forgot-password` — creates reset token (email if SMTP configured).
-- `POST /auth/reset-password` — consumes token, updates password.
-
----
-
-## 6. Database
-
-### 6.1 Core tables
-
-| Table | Purpose |
-|-------|---------|
-| `users` | Recruiters and students |
-| `interviews` | Session metadata, `status`, `completed_at` |
-| `participants` | Links `student_id` to `interview_id` after join |
-| `violations` | Persisted monitoring events |
-| `refresh_tokens` | Refresh token rotation |
-| `password_reset_tokens` | One-time reset tokens |
-| `voiceprints` | JSON embedding per `candidate_id` (interview id) |
-
-### 6.2 Migrations
-
-SQL migrations live in `backend/migrations/`. Applied automatically on backend startup via `migration_runner.py`, or manually:
-
-```bash
-cd backend
-python scripts/apply_migrations.py
-```
-
----
-
-## 7. Backend API (port 8000)
-
-### 7.1 Interview lifecycle
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /interviews/` | Create interview (recruiter) |
-| `GET /interviews/` | List interviews (role-scoped) |
-| `GET /interviews/{id}` | Get interview (authorized) |
-| `GET /interviews/{id}/join-preview` | Pre-join validation (student, safe fields) |
-| `POST /interviews/{id}/join` | Create participant row (student) |
-| `PATCH /interviews/{id}/complete` | Lock interview (`completed_at`) |
-| `DELETE /interviews/{id}` | Cascade delete interview + cleanup |
-| `GET /interviews/{id}/participants` | List participants |
-
-**Interview completion** triggers WebSocket `interview-completed` to tear down rooms and notify clients.
-
-### 7.2 Computer vision & identity
-
-| Endpoint | Service | Purpose |
-|----------|---------|---------|
-| `POST /cv/check-face` | `face_detector` | NO_FACE / MULTIPLE_FACE |
-| `POST /identity/verify-identity` | DeepFace / face_recognition | IDENTITY_MISMATCH |
-| `POST /object-detection/check` | YOLO (`yolov8n.pt`) | Phone, book, laptop, person count |
-| `POST /verification/upload` | File storage | Reference photo at verification |
-
-### 7.3 Violations
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /violations/` | Record violation (JWT + participant checks) |
-| `GET /violations/interview/{id}` | List violations for interview |
-
-### 7.4 Reports
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /reports/` | List reports for recruiter's interviews |
-| `GET /reports/{id}` | Report detail (violations as events) |
-| `POST /reports/generate/{interview_id}` | Generate/snapshot report |
-
-### 7.5 Signaling
-
-| Endpoint | Description |
-|----------|-------------|
-| `WebSocket /ws/interview/{interview_id}?role=student\|recruiter&token=...` | Signaling + monitoring relay |
-
-**Relayed message types:** `offer`, `answer`, `ice-candidate`, `monitoring-event`, `status-update`, `room-joined`, `peer-joined`, `peer-left`, `interview-completed`.
-
----
-
-## 8. Attention service (port 8001)
-
-Separate FastAPI process to isolate heavy MediaPipe + PyTorch from the main API.
-
-### 8.1 Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /` | Health check |
-| `POST /attention/analyze` | Face landmarks, head pose, eyes, mouth, attention |
-| `POST /voice/register` | Store voiceprint embedding (JWT student) |
-| `POST /voice/verify` | Compare live audio to stored embedding |
-| `DELETE /voice/{candidate_id}` | Remove voiceprint |
-
-### 8.2 Model loading
-
-Models are **lazy-loaded** on first use (not at import):
-
-- `face_landmarker.task` — absolute path via `Path(__file__)`
-- `VoiceEncoder()` — Resemblyzer / PyTorch
-
-Startup `lifespan` in `main.py` warms both models and logs failures with Python tracebacks.
-
-### 8.3 Configuration
-
-Loads env from `attention_service/.env`, then `backend/.env`, then project `.env` (`config.py`).
-
-Requires: `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM` (shared with backend for JWT validation on voice routes).
-
----
-
-## 9. WebRTC & signaling
-
-### 9.1 Connection flow
-
-1. Both peers open WebSocket to `/ws/interview/{interview_id}?role=...&token=...`.
-2. **Recruiter** is the offer initiator when a student is in the room.
-3. Recruiter creates SDP offer → student answers → ICE candidates exchanged via WebSocket.
-4. Media streams attach peer-to-peer (`RTCPeerConnection` in `useWebRTC.js`).
-
-### 9.2 ICE configuration
-
-Default STUN servers (Google) in `webrtcService.js`:
-
-```javascript
-{ urls: 'stun:stun.l.google.com:19302' }
-```
-
-Production may require TURN for restrictive networks (not bundled by default).
-
-### 9.3 Media controls
-
-- **Student & recruiter** can toggle local camera/mic via `track.enabled` (does not disconnect WebRTC).
-- Implementation: `setVideoEnabled` / `setAudioEnabled` in `useWebRTC.js`.
-
----
-
-## 10. Monitoring pipeline
-
-Implemented in `frontend/src/hooks/useMonitoring.js`. Runs only when `active === true` (interview started, session not ended).
-
-### 10.1 Parallel loops (independent async loops)
-
-| Loop | Interval | API | Violation types |
-|------|----------|-----|-----------------|
-| Attention | 1s | Attention `/attention/analyze` | `HEAD_*`, `EYE_*`, `EYES_CLOSED` |
-| Face | 2s | Backend `/cv/check-face` | `NO_FACE`, `MULTIPLE_PERSON_FACE` |
-| Object | 3s | Backend `/object-detection/check` | `OBJECT_PHONE`, `OBJECT_BOOK`, `OBJECT_DEVICE`, `MULTIPLE_PERSON_YOLO` |
-| Identity | 4s | Backend `/identity/verify-identity` | `IDENTITY_MISMATCH` |
-| Voice | 1s cooldown | Attention `/voice/verify` | `VOICE_MISMATCH` |
-
-### 10.2 `report()` function
-
-Each violation:
-
-1. Dedupes by type (5s window).
-2. Sends `monitoring-event` over WebSocket to recruiter.
-3. Calls `violationService.record()` → `POST /violations/`.
-4. Does **not** show student toast popups (except fullscreen uses dedicated overlay).
-
-### 10.3 Environment proctoring (student room)
-
-Handled in `StudentInterviewRoom.jsx`:
-
-| Event | Violation | Student UX |
-|-------|-----------|------------|
-| Tab hidden | `TAB_SWITCH` | Terminates interview, completes with reason |
-| Window blur | `WINDOW_BLUR` | Silent (recorded only) |
-| Window resize | `WINDOW_RESIZE` | Silent |
-| Fullscreen exit | `FULLSCREEN_EXIT` | Blocking overlay + must return to fullscreen |
-
-### 10.4 Status updates
-
-`pushStatus()` sends `status-update` WebSocket messages (face, identity, object, attention, voice, etc.) to populate recruiter `MonitoringPanel`.
-
----
-
-## 11. Violations & integrity score
-
-### 11.1 Raw vs display types
-
-Backend stores **raw** types (e.g. `MULTIPLE_PERSON_FACE`, `HEAD_LEFT`). Frontend `utils/violations.js` maps them to **11 recruiter categories**.
-
-### 11.2 Integrity score
-
-Computed client-side in `violationService.aggregate()` from the violation timeline:
-
-- Category weights (e.g. multiple person = highest weight).
-- `MULTIPLE_PERSON_FACE` + `MULTIPLE_PERSON_YOLO` deduped via `max()` per time window.
-- Displayed in `IntegrityDashboard` on recruiter room.
-
-### 11.3 Severity colors
-
-Yellow → orange → red → purple by category (head/eye vs object/voice vs multiple person).
-
----
-
-## 12. Frontend application
-
-### 12.1 Key routes
-
-| Path | Role | Page |
-|------|------|------|
-| `/login`, `/register` | Guest | Auth |
-| `/student/dashboard` | Student | Dashboard |
-| `/student/join` | Student | Join interview |
-| `/student/interview/:id/verify` | Student | Photo + voice registration |
-| `/student/interview/:id` | Student | Live interview room |
-| `/recruiter/dashboard` | Recruiter | Dashboard |
-| `/recruiter/create` | Recruiter | Create interview |
-| `/recruiter/interview/:id` | Recruiter | Monitoring room |
-| `/recruiter/reports/:id` | Recruiter | Report detail + PDF |
-
-### 12.2 State management
-
-| Redux slice | Purpose |
-|-------------|---------|
-| `authSlice` | User, login/logout |
-| `interviewSlice` | Current interview, list, join |
-| `monitoringSlice` | Live events, statuses, warnings |
-| `reportSlice` | Report data |
-
-### 12.3 Mock mode
-
-`VITE_USE_MOCK=true` (default in dev example) uses `mockData.js` instead of API. **Production must set `VITE_USE_MOCK=false`.**
-
----
-
-## 13. End-to-end user flows
-
-### 13.1 Recruiter flow
-
-```
-Register (recruiter) → Login
-  → Create interview (POST /interviews/)
-  → Open monitoring room (/recruiter/interview/:id)
-  → WebRTC connects when student joins
-  → View live violations, integrity score, monitoring badges
-  → End interview or generate report
-```
-
-### 13.2 Student flow
-
-```
-Register (student) → Login
-  → Join interview (/student/join) — join-preview + POST join
-  → Verification page — upload photo + register voice
-  → Start interview room — fullscreen, WebRTC, monitoring loops
-  → Only FULLSCREEN_EXIT shows blocking UI to student
-  → Tab switch terminates session
-```
-
-### 13.3 Join circular dependency (fixed)
-
-Students use `GET /interviews/{id}/join-preview` **before** participant row exists. Full `GET /interviews/{id}` requires participant membership after join.
-
----
-
-## 14. Environment variables
-
-### 14.1 Backend (`backend/.env`)
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `SECRET_KEY` | Yes | JWT signing key |
-| `ALGORITHM` | No | Default `HS256` |
-| `FRONTEND_URL` | Yes (prod) | CORS + password reset links |
-| `ATTENTION_SERVICE_URL` | No | Default `http://localhost:8001` |
-| `CORS_ORIGINS` | No | Extra comma-separated origins |
-| `SMTP_*` | No | Email for password reset |
-
-### 14.2 Attention service
-
-Shares `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM` via `backend/.env`.
-
-### 14.3 Frontend (build-time `VITE_*`)
-
-| Variable | Description |
-|----------|-------------|
-| `VITE_API_BASE_URL` | Backend REST base URL |
-| `VITE_ATTENTION_SERVICE_URL` | Attention service URL |
-| `VITE_WS_BASE_URL` | WebSocket base (same host as API) |
-| `VITE_USE_MOCK` | `false` for production |
-
----
-
-## 15. Local development
-
-### 15.1 Prerequisites
-
-- Python 3.11+, Node 18+
-- PostgreSQL (or Supabase URL in `.env`)
-- Virtualenv with backend + attention dependencies
-
-### 15.2 Start services
+### 1) Attention Express (spawns Attention Worker)
 
 ```powershell
-# Terminal 1 — Backend
-cd backend
-..\mediapipe_env\Scripts\uvicorn.exe app.main:app --reload --port 8000
+cd D:\Desktop\HIRELENS\attention-node
+copy .env.example .env   # if needed; fill DATABASE_URL + SECRET_KEY
+npm install
+npx prisma generate
+npm start
+```
 
-# Terminal 2 — Attention (from attention_service directory)
-cd attention_service
-..\mediapipe_env\Scripts\python.exe -m uvicorn main:app --reload --port 8001
+### 2) Main Express (spawns Vision Worker)
 
-# Terminal 3 — Frontend
-cd frontend
+```powershell
+cd D:\Desktop\HIRELENS\backend-node
+copy .env.example .env   # fill DATABASE_URL, SECRET_KEY, CLOUDINARY_*, ATTENTION_SERVICE_URL
+npm install
+npx prisma generate
+npm start
+```
+
+`ATTENTION_SERVICE_URL` must be `http://127.0.0.1:8001`.
+
+Worker venvs (created once):
+
+```powershell
+# Vision
+cd backend-node\python_vision_worker
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+
+# Attention
+cd attention-node\python_attention_worker
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+```
+
+Set `PYTHON_PATH` in each Node `.env` to the matching `.venv\Scripts\python.exe`.
+
+### 3) Frontend
+
+```powershell
+cd D:\Desktop\HIRELENS\frontend
 npm install
 npm run dev
 ```
-
-### 15.3 Frontend env (`frontend/.env`)
-
-```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_ATTENTION_SERVICE_URL=http://localhost:8001
-VITE_WS_BASE_URL=ws://127.0.0.1:8000
-VITE_USE_MOCK=false
-```
-
----
-
-## 16. Deployment
-
-
-| Layer | Host |
-|-------|------|
-| Frontend | [Vercel](https://hirelens-puce-two.vercel.app) |
-| Database | Supabase (PostgreSQL) |
-| Backend API + signaling | Your PC (`:8000`) via Cloudflare tunnel |
-| Attention / voice ML | Your PC (`:8001`, internal) |
-
-
----
-
-### 16.1. Prerequisites
-
-- Windows PC (for free-tier backend hosting)
-- Python 3.11+ with venv at `mediapipe_env/`
-- Node 18+ (only if you build frontend locally)
-- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed
-- Supabase project + env vars in `backend/.env`
-- Vercel project linked to this repo
-
----
-
-### 16.2 Quick start: PC backend + Vercel frontend
-
-#### 16.2.1. Backend environment (`backend/.env`)
-
-```env
-FRONTEND_URL=https://hirelens-puce-two.vercel.app
-ATTENTION_SERVICE_URL=http://127.0.0.1:8001
-DATABASE_URL=postgresql://...
-SECRET_KEY=your-secret-key
-```
-
-#### 16.2.2. Install Python dependencies (once)
-
-```powershell
-D:\Desktop\InterviewAI_1\mediapipe_env\Scripts\python.exe -m pip install -r D:\Desktop\InterviewAI_1\backend\requirements.txt
-```
-
-WebRTC video requires WebSockets:
-
-```powershell
-D:\Desktop\InterviewAI_1\mediapipe_env\Scripts\python.exe -m pip install "uvicorn[standard]" websockets
-```
-
-#### 16.2.3. Start services (three terminals)
-
-**Terminal 1 — Attention (`:8001`)**
-
-```powershell
-cd D:\Desktop\InterviewAI_1\attention_service
-..\mediapipe_env\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001
-```
-
-**Terminal 2 — Backend (`:8000`)**
-
-```powershell
-cd D:\Desktop\InterviewAI_1\backend
-..\mediapipe_env\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-Wait for `Application startup complete`, then test:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/
-```
-
-Expected: `InterviewAI Backend Running`
-
-**Terminal 3 — Cloudflare tunnel**
-
-```powershell
-cloudflared tunnel --url http://localhost:8000
-```
-
-Copy the URL printed in the terminal, for example:
-
-```text
-https://random-words.trycloudflare.com
-```
-
-Keep all three terminals open while using the app.
-
----
-
-#### 16.2.4. Connect Vercel to your PC
-
-The tunnel URL **changes** whenever you restart `cloudflared`. After each restart:
-
-1. Copy the new `https://....trycloudflare.com` from the tunnel terminal (or `deploy/tunnel-api.log` if using the start script).
-2. Vercel → Project → **Settings** → **Environment Variables** (Production):
-
-| Variable | Example |
-|----------|---------|
-| `VITE_API_BASE_URL` | `https://random-words.trycloudflare.com` |
-| `VITE_WS_BASE_URL` | `wss://random-words.trycloudflare.com` |
-| `VITE_USE_MOCK` | `false` |
-
-3. **Deployments** → **Redeploy** (use **Redeploy without cache** if the URL changed).
-
-4. Verify the tunnel reaches your backend:
-
-```powershell
-Invoke-RestMethod https://YOUR-tunnel.trycloudflare.com/
-```
-
-**Rules:** paste only the URL (no Windows paths). Use `wss://` for WebSocket, not `https://`. No trailing slash.
-
----
-
-### 16.3. Local development (everything on one PC)
-
-```powershell
-# Backend :8000, Attention :8001 (see above)
-
-cd frontend
-npm install
-npm run dev
-```
-
-Create `frontend/.env`:
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000
@@ -650,56 +124,78 @@ VITE_WS_BASE_URL=ws://127.0.0.1:8000
 VITE_USE_MOCK=false
 ```
 
-Open http://localhost:5173
+### 4) Cloudflare Tunnel (optional)
 
----
+See [`deploy/CLOUDFLARE_TUNNEL.md`](deploy/CLOUDFLARE_TUNNEL.md).
 
-### 16.4 Optional: start script
-
-```cmd
-D:\Desktop\InterviewAI_1\deploy\start-free-windows.bat
+```powershell
+cd D:\Desktop\HIRELENS\backend-node
+npm run tunnel
 ```
 
-Starts attention, backend, and tunnel in the background. Logs: `deploy/backend-err.log`, `deploy/tunnel-api.log`.
+Then set frontend / Vercel:
 
----
-
-### 16.5. Repository structure
-
-```text
-backend/           FastAPI API, WebSocket signaling, CV/identity/object
-attention_service/ MediaPipe attention + voice verification
-frontend/          React + Vite (deployed to Vercel)
-deploy/            Tunnel notes, Windows start scripts, tests
-docs/              Full technical documentation
+```env
+VITE_API_BASE_URL=https://<tunnel-domain>
+VITE_WS_BASE_URL=wss://<tunnel-domain>
 ```
 
 ---
 
-## 17. Troubleshooting
+## Environment variables
 
-| Problem | What to check |
-|---------|----------------|
-| Login / API fails on Vercel | Backend running? Tunnel URL correct in Vercel? Redeploy after env change |
-| CORS error in browser | `FRONTEND_URL` in `backend/.env` matches your Vercel URL |
-| 502 on API | Backend crashed — terminal 2 or `deploy/backend-err.log` |
-| Video stuck on "Connecting" | `websockets` installed; WebSocket URL is `wss://` same host as API |
-| Tunnel URL unknown | Read output of `cloudflared` or `deploy/tunnel-api.log` |
+### `backend-node/.env` (required)
 
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL / Supabase |
+| `SECRET_KEY` | JWT signing (must match Attention) |
+| `ALGORITHM` | Usually `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` / `REFRESH_TOKEN_EXPIRE_DAYS` | Token lifetimes |
+| `ATTENTION_SERVICE_URL` | `http://127.0.0.1:8001` |
+| `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Verification photos |
+| `FRONTEND_URL` / `CORS_ORIGINS` | CORS |
+| `PYTHON_PATH` | Vision worker Python executable |
 
+### `attention-node/.env` (required)
 
-| Issue | Check |
-|-------|--------|
-| Student join 403 | Use join-preview; ensure `POST /join` ran |
-| WebRTC no video | HTTPS required in prod; STUN/TURN; both peers connected |
-| Monitoring not on recruiter | `receiveMonitoring: true` on recruiter `useWebRTC` |
-| Attention `Aborted!` | Start from `attention_service/` cwd; lazy model init |
-| CORS errors | Set `FRONTEND_URL` + `CORS_ORIGINS` on backend/attention |
-| Login fails on Vercel | `VITE_API_BASE_URL` must point to live backend, not localhost |
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Same database |
+| `SECRET_KEY` | **Same as Main** |
+| `PORT` | `8001` |
+| `PYTHON_PATH` | Attention worker Python executable |
+
+Never commit real `.env` files. Use `.env.example` templates.
 
 ---
-## License & links
 
-- **GitHub:** https://github.com/eryadavpraveen/HIRELENS
-- **Production app:** https://hirelens-puce-two.vercel.app
-- **Documentation:** https://drive.google.com/file/d/1Zm6oYHtleAHODCNt6UWASCwYfnQuCPUc/view?usp=sharing
+## API surface (Main Express `:8000`)
+
+Auth, interviews, participants, violations, reports, candidates, verification (Cloudinary), identity, CV face check, object detection, attention/voice **proxy**, WebSocket:
+
+`/ws/interview/{id}?role=recruiter|student`
+
+Attention Express (`:8001`) is called by Main only (`/attention/analyze`, `/voice/*`).
+
+---
+
+## Deployment notes
+
+- Dockerfiles live under `backend-node/` and `attention-node/` (Node + Python worker in one image).
+- Cloudflare Tunnel helpers live under `deploy/` (tunnel → Main Express only).
+- Historical FastAPI/Uvicorn docs in older markdown under `docs/` or `Interview_Preparation/` are **not** the active runtime.
+
+---
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| API unreachable from Vercel | Tunnel running? `VITE_API_BASE_URL` / `VITE_WS_BASE_URL` updated? |
+| Attention 503 | Is `attention-node` up on `:8001`? Worker warmed? |
+| Vision / face errors | Vision worker `.venv` + `yolov8n.pt` present? |
+| CORS errors | `FRONTEND_URL` / `CORS_ORIGINS` include your Vercel origin |
+| WS fails through tunnel | Use `wss://` with `https://` tunnel URL |
+
+More tunnel detail: [`deploy/CLOUDFLARE_TUNNEL.md`](deploy/CLOUDFLARE_TUNNEL.md).

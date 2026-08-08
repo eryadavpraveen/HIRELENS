@@ -1,7 +1,7 @@
 /**
  * Mock data for HIRELENS frontend development.
  * Used when VITE_USE_MOCK !== 'false'. Mirrors the shape returned by the
- * FastAPI backend + attention service so the UI can be demoed end-to-end.
+ * Express Main + Attention APIs so the UI can be demoed end-to-end.
  */
 
 export const mockInterviews = [
@@ -24,7 +24,7 @@ export const mockInterviews = [
   {
     id: 'int-002',
     title: 'Backend Engineer Screening',
-    description: 'Python and FastAPI fundamentals',
+    description: 'Python and Express fundamentals',
     recruiter_id: 'rec-001',
     recruiter_name: 'Sarah Chen',
     status: 'active',

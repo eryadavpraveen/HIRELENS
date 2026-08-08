@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         String
+  createdAt    DateTime? @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Participant {
+  id                String    @id @default(uuid()) @db.Uuid
+  verificationPhoto String?   @map("verification_photo")
+  interviewId       String    @map("interview_id") @db.Uuid
+  studentId         String    @map("student_id") @db.Uuid
+  joinedAt          DateTime? @default(now()) @map("joined_at")
+
+  @@map("participants")
+}
+
+model Voiceprint {
+  id          String   @id @default(uuid()) @db.Uuid
+  candidateId String   @unique @map("candidate_id")
+  embedding   Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@index([candidateId], map: "idx_voiceprints_candidate_id")
+  @@map("voiceprints")
+}

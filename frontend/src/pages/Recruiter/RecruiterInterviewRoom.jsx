@@ -66,7 +66,7 @@ export default function RecruiterInterviewRoom() {
       .then((events) => {
         if (events && events.length) dispatch(setLiveEvents(events))
       })
-      .catch(() => {})
+      .catch(() => { })
 
     const timer = setInterval(() => setElapsed((s) => s + 1), 1000)
     return () => clearInterval(timer)
@@ -88,7 +88,7 @@ export default function RecruiterInterviewRoom() {
           setCandidate({ name: primary.name, email: primary.email })
         }
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [id])
 
   const displayCandidate = useMemo(() => {
@@ -189,6 +189,15 @@ export default function RecruiterInterviewRoom() {
             <VideoStream self={false} stream={remoteStream} muted={false} label="Candidate Video" connected={peerConnected} />
             <VideoStream self={cameraOn} stream={localStream} label="Recruiter Video (You)" />
           </div>
+          <RecruiterInterviewControls
+            cameraOn={cameraOn}
+            micOn={micOn}
+            onToggleCamera={handleToggleCamera}
+            onToggleMic={handleToggleMic}
+            onEndInterview={handleEnd}
+            onGenerateReport={handleGenerateReport}
+            generating={generating}
+          />
           <ViolationDashboard summary={assessment.summary} />
           <ViolationTimeline events={liveEvents} />
         </div>
@@ -201,16 +210,6 @@ export default function RecruiterInterviewRoom() {
           <EventTimeline events={liveEvents} />
         </div>
       </div>
-
-      <RecruiterInterviewControls
-        cameraOn={cameraOn}
-        micOn={micOn}
-        onToggleCamera={handleToggleCamera}
-        onToggleMic={handleToggleMic}
-        onEndInterview={handleEnd}
-        onGenerateReport={handleGenerateReport}
-        generating={generating}
-      />
     </div>
   )
 }

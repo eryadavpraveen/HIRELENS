@@ -1,5 +1,8 @@
 # HIRELENS — Technical Documentation
 
+> **HISTORICAL / OUTDATED:** This document still describes the legacy FastAPI layout (`backend/`, `attention_service/`, Uvicorn).
+> **Active runtime:** Express (`backend-node/`, `attention-node/`) + Python ML workers. See root [`README.md`](../README.md) and [`MIGRATION_EXPRESS.md`](../MIGRATION_EXPRESS.md).
+
 **HIRELENS** (InterviewAI) is an AI-proctored remote interview platform. Recruiters create monitored interviews; students join via WebRTC video calls while computer-vision and voice models detect integrity violations in real time.
 
 **Repository:** [github.com/eryadavpraveen/HIRELENS](https://github.com/eryadavpraveen/HIRELENS)

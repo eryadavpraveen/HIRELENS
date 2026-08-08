@@ -5,24 +5,51 @@
 !**/.env.example
 !**/.env.production.example
 backend/.env
+attention_service/.env
+backend-node/.env
+attention-node/.env
 
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .venv/
 venv/
 mediapipe_env/
 interviewai_env/
 *.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Node / frontend
 node_modules/
 frontend/dist/
+dist/
+.npm/
+*.tsbuildinfo
 
-# Uploads & local data
+# Prisma generated clients (local); schema.prisma is tracked
+**/generated/prisma/
+
+# Uploads & local media (do not commit user content)
 backend/uploads/
-*.pyc
+**/uploads/
+**/tmp/
+**/temp/
+*.webm
+# Keep intentional sample assets already in repo if tracked; ignore new recordings:
+backend-node/**/recordings/
+attention-node/**/recordings/
+
+# ML / framework caches (keep intentional worker model files: yolov8n.pt, face_landmarker.task)
+.cache/
+**/.cache/
+**/torch_cache/
+**/ultralytics/
+**/runs/
+**/wandb/
 
 # OS / IDE
 .DS_Store
@@ -30,8 +57,29 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Logs
+# Logs & runtime output
 *.log
+deploy/*.log
+backend-node/scripts/*-out.json
+backend-node/scripts/attn-*.json
+backend-node/scripts/env-audit*.json
+backend-node/scripts/integration-report-*.json
+backend-node/scripts/test-face.jpg
+backend-node/scripts/*.jpg
+backend-node/scripts/*.jpeg
+backend-node/scripts/*.png
+backend-node/scripts/*.wav
+
+# Local office / misc artifacts
+*.docx
+HIRELENS.docx
+
+# Preserved local secrets from removed FastAPI apps (never commit)
+local-env-backups/
+
+# Legacy root venvs (if recreated; active workers use */python_*_worker/.venv)
+interviewai_env/
+mediapipe_env/
 
 # Cursor
 .cursor/

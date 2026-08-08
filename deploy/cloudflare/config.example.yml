@@ -1,0 +1,31 @@
+# Optional NAMED Cloudflare Tunnel config (stable hostname).
+# Copy to a private path (do not commit secrets) and fill values from the Cloudflare dashboard.
+#
+# Quick tunnels (default for local demos) do NOT need this file — use:
+#   cloudflared tunnel --url http://127.0.0.1:8000
+# or:
+#   npm run tunnel   (from backend-node/)
+#   .\deploy\start-tunnel.ps1
+#
+# Architecture:
+#   Internet → Cloudflare Tunnel → Main Express http://127.0.0.1:8000
+#   Main Express → Attention Express http://127.0.0.1:8001 (local only)
+#   Express services → Python ML workers (local only; never tunnel these)
+#
+# Do NOT add ingress rules for :8001 or worker ports.
+
+tunnel: YOUR_TUNNEL_UUID
+credentials-file: C:\path\to\YOUR_TUNNEL_UUID.json
+
+ingress:
+  # Single public origin: Main Express (REST + WebSocket /ws/interview/...)
+  - hostname: api.example.com
+    service: http://127.0.0.1:8000
+    originRequest:
+      # WebSocket upgrades are supported for HTTP origins by default.
+      # Keep connections alive for interview signaling sessions.
+      noTLSVerify: false
+      connectTimeout: 30s
+      # Long-lived WS / signaling
+      keepAliveTimeout: 90s
+  - service: http_status:404
