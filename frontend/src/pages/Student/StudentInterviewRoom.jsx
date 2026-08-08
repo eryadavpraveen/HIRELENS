@@ -239,8 +239,15 @@ export default function StudentInterviewRoom() {
             with {currentInterview.recruiter_name || 'your recruiter'}
           </p>
         </div>
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md space-y-3">
           <VideoStream self stream={localStream} label="Camera Preview" />
+          <VideoStream
+            self={false}
+            stream={remoteStream}
+            muted={false}
+            label={currentInterview.recruiter_name || 'Recruiter'}
+            connected={peerConnected}
+          />
         </div>
         <p className="max-w-md text-sm text-muted-foreground">
           This is a monitored interview. Please remain in fullscreen, keep your face visible,

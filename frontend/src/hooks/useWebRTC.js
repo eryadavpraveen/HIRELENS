@@ -13,6 +13,9 @@ import { IS_MOCK } from '@/utils/env'
 
 /**
  * useWebRTC — peer connection + signaling WebSocket for interview rooms.
+ *
+ * Media must exist before offer/answer so both SDP sides include sendrecv video.
+ * ontrack always attaches tracks even when e.streams is empty.
  */
 export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSessionEnd }) {
   const dispatch = useDispatch()
@@ -62,18 +65,72 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
     let localStreamLocal = null
     let opened = false
     let initiated = false
-    let wantInitiate = false
     let intentionalClose = false
     let reconnectTimer = null
     let offerPollTimer = null
     let everOpened = false
     let peerLive = false
+    let pendingRemoteOffer = null
+    const remoteMediaStream = new MediaStream()
     const pendingCandidates = []
     const PROTECTED_SIGNALING = new Set(['have-local-offer', 'have-remote-offer', 'stable'])
     const log = (msg, data) => rtcLog(role, msg, data)
     const warn = (msg, data) => rtcWarn(role, msg, data)
 
-    /** One RTCPeerConnection per session — only replace when reset is allowed or session ends. */
+    function publishRemoteStream() {
+      if (cancelled) return
+      // New MediaStream wrapper so React sees a distinct object when tracks are added.
+      setRemoteStream(new MediaStream(remoteMediaStream.getTracks()))
+      setPeerConnected(true)
+      peerLive = true
+    }
+
+    function handleRemoteTrack(event) {
+      const track = event.track
+      if (!track) return
+      log('ontrack', {
+        kind: track.kind,
+        id: track.id,
+        streams: event.streams?.length ?? 0,
+        readyState: track.readyState,
+        enabled: track.enabled,
+      })
+
+      const inbound = event.streams?.[0]
+      if (inbound) {
+        inbound.getTracks().forEach((t) => {
+          if (!remoteMediaStream.getTracks().includes(t)) remoteMediaStream.addTrack(t)
+        })
+      } else if (!remoteMediaStream.getTracks().includes(track)) {
+        remoteMediaStream.addTrack(track)
+      }
+
+      track.onunmute = () => {
+        log('remote track unmuted', track.kind)
+        publishRemoteStream()
+      }
+      publishRemoteStream()
+    }
+
+    function attachLocalTracks(peer) {
+      if (!peer || !localStreamLocal) return 0
+      const existing = new Set(peer.getSenders().map((s) => s.track).filter(Boolean))
+      let added = 0
+      localStreamLocal.getTracks().forEach((track) => {
+        if (!existing.has(track)) {
+          peer.addTrack(track, localStreamLocal)
+          added += 1
+        }
+      })
+      if (added) {
+        log(
+          'local tracks added to peer',
+          localStreamLocal.getTracks().map((t) => `${t.kind}:${t.readyState}:${t.enabled}`),
+        )
+      }
+      return added
+    }
+
     function canResetPeer({ sessionEnd = false, reason = '' } = {}) {
       if (sessionEnd) return true
       if (!pc) return true
@@ -90,6 +147,10 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
     function clearPeerState() {
       initiated = false
       pendingCandidates.length = 0
+      pendingRemoteOffer = null
+      remoteMediaStream.getTracks().forEach((t) => {
+        remoteMediaStream.removeTrack(t)
+      })
       if (!cancelled) {
         setRemoteStream(null)
         setPeerConnected(false)
@@ -97,7 +158,6 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       }
     }
 
-    /** Tear down peer — always allowed (peer-left, interview end, hook cleanup). */
     function closePeerSession(reason) {
       if (pc) {
         log('closePeerSession', {
@@ -111,7 +171,6 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       clearPeerState()
     }
 
-    /** Reset peer only when signaling is not mid-negotiation (unless failed/closed or session end). */
     function resetPeer(reason = 'unknown', options = {}) {
       if (!canResetPeer({ ...options, reason })) return false
       if (pc) {
@@ -130,8 +189,6 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
     function resendLocalOffer() {
       if (!pc?.localDescription?.sdp) return false
       const sig = pc.signalingState
-      // Only while waiting for peer answer — re-sending in `stable` makes the student answer again
-      // and triggers "Cannot set remote answer in state stable" on the recruiter.
       if (sig !== 'have-local-offer') {
         log('resendLocalOffer skipped', { signalingState: sig })
         return false
@@ -142,7 +199,12 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
     }
 
     function isPeerEstablished() {
-      return peerLive || pc?.connectionState === 'connected' || pc?.iceConnectionState === 'connected' || pc?.iceConnectionState === 'completed'
+      return (
+        peerLive ||
+        pc?.connectionState === 'connected' ||
+        pc?.iceConnectionState === 'connected' ||
+        pc?.iceConnectionState === 'completed'
+      )
     }
 
     function shouldInitiateOffer() {
@@ -178,7 +240,11 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
         }
       }
       peer.onconnectionstatechange = () => {
-        log('connectionState', peer.connectionState)
+        log('connectionState', {
+          connectionState: peer.connectionState,
+          iceConnectionState: peer.iceConnectionState,
+          signalingState: peer.signalingState,
+        })
         if (peer.connectionState === 'connected') {
           if (!cancelled) {
             setPeerConnected(true)
@@ -193,14 +259,7 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
           if (peer.connectionState === 'failed') warn('peer connection failed')
         }
       }
-      peer.ontrack = (e) => {
-        log('ontrack', { streams: e.streams.length, kind: e.track?.kind })
-        if (!cancelled && e.streams[0]) {
-          setRemoteStream(e.streams[0])
-          setPeerConnected(true)
-          peerLive = true
-        }
-      }
+      peer.ontrack = handleRemoteTrack
     }
 
     function ensurePeer() {
@@ -208,17 +267,57 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
         log('ensurePeer reuse', {
           signalingState: pc.signalingState,
           connectionState: pc.connectionState,
+          senders: pc.getSenders().filter((s) => s.track).map((s) => s.track.kind),
         })
+        attachLocalTracks(pc)
         return pc
       }
       log('ensurePeer create — new RTCPeerConnection')
       pc = new RTCPeerConnection(RTC_CONFIG)
       bindPeerEvents(pc)
-      if (localStreamLocal) {
-        localStreamLocal.getTracks().forEach((t) => pc.addTrack(t, localStreamLocal))
-        log('local tracks added to peer', localStreamLocal.getTracks().map((t) => t.kind))
-      }
+      attachLocalTracks(pc)
       return pc
+    }
+
+    async function drainCandidates(peer) {
+      while (pendingCandidates.length) {
+        const c = pendingCandidates.shift()
+        try {
+          await peer.addIceCandidate(new RTCIceCandidate(c))
+          log('ICE candidate applied (drained)')
+        } catch (err) {
+          warn('ICE drain failed', err?.message)
+        }
+      }
+    }
+
+    async function answerOffer(msg) {
+      if (!localStreamLocal) {
+        pendingRemoteOffer = msg
+        warn('offer deferred — waiting for local media before answer')
+        return
+      }
+      const peer = ensurePeer()
+      if (peer.signalingState === 'have-local-offer') {
+        warn('offer ignored — unexpected have-local-offer on answerer')
+        return
+      }
+      attachLocalTracks(peer)
+      await peer.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+      await drainCandidates(peer)
+      if (peer.signalingState !== 'have-remote-offer') {
+        warn('offer handler — expected have-remote-offer after setRemote', peer.signalingState)
+        return
+      }
+      const answer = await peer.createAnswer()
+      await peer.setLocalDescription(answer)
+      const sdp = peer.localDescription?.sdp || ''
+      log('answer created', {
+        hasVideo: sdp.includes('m=video'),
+        senders: peer.getSenders().filter((s) => s.track).map((s) => s.track.kind),
+        signalingState: peer.signalingState,
+      })
+      send({ type: 'answer', sdp: peer.localDescription })
     }
 
     async function createOffer({ force = false } = {}) {
@@ -239,8 +338,14 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       try {
         initiated = true
         const peer = ensurePeer()
+        attachLocalTracks(peer)
         const offer = await peer.createOffer()
         await peer.setLocalDescription(offer)
+        const sdp = peer.localDescription?.sdp || ''
+        log('offer created', {
+          hasVideo: sdp.includes('m=video'),
+          senders: peer.getSenders().filter((s) => s.track).map((s) => s.track.kind),
+        })
         send({ type: 'offer', sdp: peer.localDescription })
       } catch (err) {
         initiated = false
@@ -259,19 +364,6 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       }
       log('maybeInitiate', { force, hasMedia: Boolean(localStreamLocal), initiated })
       if (localStreamLocal) createOffer({ force })
-      else wantInitiate = true
-    }
-
-    async function drainCandidates(peer) {
-      while (pendingCandidates.length) {
-        const c = pendingCandidates.shift()
-        try {
-          await peer.addIceCandidate(new RTCIceCandidate(c))
-          log('ICE candidate applied (drained)')
-        } catch (err) {
-          warn('ICE drain failed', err?.message)
-        }
-      }
     }
 
     async function handle(msg) {
@@ -303,24 +395,10 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
           case 'request-offer':
             if (role === 'recruiter' && shouldInitiateOffer()) maybeInitiate(true)
             break
-          case 'offer': {
+          case 'offer':
             log('offer received', { signalingState: pc?.signalingState })
-            const peer = ensurePeer()
-            if (peer.signalingState === 'have-local-offer') {
-              warn('offer ignored — unexpected have-local-offer on answerer')
-              break
-            }
-            await peer.setRemoteDescription(new RTCSessionDescription(msg.sdp))
-            await drainCandidates(peer)
-            if (peer.signalingState !== 'have-remote-offer') {
-              warn('offer handler — expected have-remote-offer after setRemote', peer.signalingState)
-              break
-            }
-            const answer = await peer.createAnswer()
-            await peer.setLocalDescription(answer)
-            send({ type: 'answer', sdp: peer.localDescription })
+            await answerOffer(msg)
             break
-          }
           case 'answer': {
             log('answer received', { signalingState: pc?.signalingState })
             const peer = ensurePeer()
@@ -330,6 +408,11 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
             }
             await peer.setRemoteDescription(new RTCSessionDescription(msg.sdp))
             await drainCandidates(peer)
+            log('answer applied', {
+              connectionState: peer.connectionState,
+              iceConnectionState: peer.iceConnectionState,
+              signalingState: peer.signalingState,
+            })
             break
           }
           case 'ice-candidate': {
@@ -409,25 +492,10 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
             duration,
             timestamp: new Date().toISOString(),
             message: type.replace(/_/g, ' '),
-          })
+          }),
         )
       }, 6000)
     }
-
-    getLocalMedia()
-      .then((stream) => {
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-        localStreamLocal = stream
-        localStreamRef.current = stream
-        setLocalStream(stream)
-        log('local media acquired', stream.getTracks().map((t) => t.kind))
-        if (pc) stream.getTracks().forEach((t) => pc.addTrack(t, stream))
-        if (wantInitiate) createOffer({ force: true })
-      })
-      .catch((err) => warn('getUserMedia failed', err?.message))
 
     function scheduleReconnect() {
       if (cancelled || intentionalClose || reconnectTimer) return
@@ -445,7 +513,6 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
         if (role === 'student') {
           send({ type: 'request-offer' })
         } else if (role === 'recruiter') {
-          // Only retry if we never sent an offer, or ICE fully failed — never reset a live negotiation.
           if (!initiated && localStreamLocal) maybeInitiate(false)
           else if (pc?.connectionState === 'failed') maybeInitiate(true)
         }
@@ -504,7 +571,34 @@ export function useWebRTC({ interviewId, role, receiveMonitoring = false, onSess
       }
     }
 
-    connectSignaling()
+    // Acquire local media FIRST, then open signaling — prevents answer/offer without send tracks.
+    ;(async () => {
+      try {
+        const stream = await getLocalMedia()
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        localStreamLocal = stream
+        localStreamRef.current = stream
+        setLocalStream(stream)
+        log(
+          'local media acquired',
+          stream.getTracks().map((t) => `${t.kind}:${t.readyState}:${t.enabled}`),
+        )
+        if (pc) attachLocalTracks(pc)
+        if (pendingRemoteOffer) {
+          const deferred = pendingRemoteOffer
+          pendingRemoteOffer = null
+          await answerOffer(deferred)
+        }
+        if (!cancelled) await connectSignaling()
+      } catch (err) {
+        warn('getUserMedia failed', err?.message || err)
+        // Still connect so room messaging works; video will remain one-way/absent.
+        if (!cancelled) await connectSignaling()
+      }
+    })()
 
     return () => {
       cancelled = true

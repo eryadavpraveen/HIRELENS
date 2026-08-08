@@ -30,11 +30,35 @@ export function VideoStream({
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    // External stream (WebRTC): attach directly, no capture.
+    const el = videoRef.current
+
+    // External stream (WebRTC): attach + ensure playback (unmuted remotes can fail autoplay).
     if (stream) {
-      if (videoRef.current) videoRef.current.srcObject = stream
+      if (el) {
+        if (el.srcObject !== stream) el.srcObject = stream
+        const playAttempt = el.play?.()
+        if (playAttempt?.catch) {
+          playAttempt.catch(() => {
+            // Browser blocked unmuted autoplay — retry muted so pixels still show.
+            const wasMuted = el.muted
+            el.muted = true
+            el.play?.().catch(() => {})
+            if (!wasMuted) {
+              // Keep audio intent: unmute after a short delay if policy allows.
+              setTimeout(() => {
+                el.muted = false
+                el.play?.().catch(() => {
+                  el.muted = true
+                })
+              }, 250)
+            }
+          })
+        }
+      }
       return undefined
     }
+
+    if (el) el.srcObject = null
 
     // No external stream + remote tile: nothing to capture.
     if (!self || !enabled) {
@@ -53,7 +77,10 @@ export function VideoStream({
           return
         }
         gumRef.current = s
-        if (videoRef.current) videoRef.current.srcObject = s
+        if (videoRef.current) {
+          videoRef.current.srcObject = s
+          videoRef.current.play?.().catch(() => {})
+        }
       })
       .catch((err) => setError(err.message))
 
