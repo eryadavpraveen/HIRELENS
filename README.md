@@ -796,5 +796,5 @@ ML images (Torch / TF / MediaPipe) are large — plan for sufficient **RAM and d
 
 - **GitHub:** https://github.com/eryadavpraveen/HIRELENS  
 - **Production app:** https://hirelens-puce-two.vercel.app  
-- **Documentation:** https://drive.google.com/file/d/1Zm6oYHtleAHODCNt6UWASCwYfnQuCPUc/view?usp=sharing  
+- **Documentation:** https://drive.google.com/file/d/1WBSJ3h6luSlzL18GxsjyxGEberDRHqsb/view?usp=sharing  
 - **LinkedIn post:** [HIRELENS announcement](https://www.linkedin.com/posts/eryadavpraveen_hirelens-softwareengineering-fullstackdevelopment-ugcPost-7477014565894139904-o7_-/?utm_source=share&utm_medium=member_desktop&rcm=ACoAADSw_ioBk2LmAm8RjwFzb-7SxfCnunP3-OI)
