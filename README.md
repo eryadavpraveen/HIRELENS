@@ -1,8 +1,9 @@
-# HIRELENS — Technical Documentation
+# HIRELENS ΓÇö Technical Documentation
 
 **HIRELENS** (InterviewAI) is an AI-proctored remote interview platform. Recruiters create monitored interviews; students join via WebRTC video calls while computer-vision and voice models detect integrity violations in real time.
 
 **Repository:** [github.com/eryadavpraveen/HIRELENS](https://github.com/eryadavpraveen/HIRELENS)
+**LinkedIn:** [click here to see my linkedin post](https://www.linkedin.com/posts/eryadavpraveen_hirelens-softwareengineering-fullstackdevelopment-ugcPost-7477014565894139904-o7_-/?utm_source=share&utm_medium=member_desktop&rcm=ACoAADSw_ioBk2LmAm8RjwFzb-7SxfCnunP3-OI)
 
 > **Active runtime (2026):** Express + Node.js APIs with Python **ML workers only** (no FastAPI / Flask / Uvicorn / Gunicorn HTTP servers).
 > The old `backend/` and `attention_service/` FastAPI apps have been removed.
@@ -13,19 +14,19 @@
 
 ```text
 React (Vite)
-  ↓
+  Γåô
 Main Express + Node.js (:8000)
-  ├── PostgreSQL / Supabase (Prisma)
-  ├── Cloudinary (verification photos)
-  ├── Python Vision Worker (OpenCV / DeepFace / YOLO via NDJSON)
-  └── Express Attention Service (:8001)  ← local only; proxied by Main
-         └── Python Attention Worker (MediaPipe / Resemblyzer via NDJSON)
+  Γö£ΓöÇΓöÇ PostgreSQL / Supabase (Prisma)
+  Γö£ΓöÇΓöÇ Cloudinary (verification photos)
+  Γö£ΓöÇΓöÇ Python Vision Worker (OpenCV / DeepFace / YOLO via NDJSON)
+  ΓööΓöÇΓöÇ Express Attention Service (:8001)  ΓåÉ local only; proxied by Main
+         ΓööΓöÇΓöÇ Python Attention Worker (MediaPipe / Resemblyzer via NDJSON)
 ```
 
 Optional public exposure:
 
 ```text
-Internet → Cloudflare Tunnel → http://127.0.0.1:8000 (Main Express only)
+Internet ΓåÆ Cloudflare Tunnel ΓåÆ http://127.0.0.1:8000 (Main Express only)
 ```
 
 Do **not** tunnel port `8001` or the Python workers.
@@ -36,20 +37,20 @@ Do **not** tunnel port `8001` or the Python workers.
 
 ```
 HIRELENS/
-├── frontend/                 # React + Vite + Redux
-├── backend-node/             # Main Express API + WS + Vision Worker
-│   ├── src/
-│   ├── prisma/
-│   └── python_vision_worker/ # ML worker (+ yolov8n.pt)
-├── attention-node/           # Attention Express + Attention Worker
-│   ├── src/
-│   ├── prisma/
-│   └── python_attention_worker/  # ML worker (+ face_landmarker.task)
-├── deploy/                   # Cloudflare Tunnel helpers only
-│   ├── CLOUDFLARE_TUNNEL.md
-│   ├── start-tunnel.ps1
-│   └── cloudflare/
-└── MIGRATION_EXPRESS.md      # Migration notes
+Γö£ΓöÇΓöÇ frontend/                 # React + Vite + Redux
+Γö£ΓöÇΓöÇ backend-node/             # Main Express API + WS + Vision Worker
+Γöé   Γö£ΓöÇΓöÇ src/
+Γöé   Γö£ΓöÇΓöÇ prisma/
+Γöé   ΓööΓöÇΓöÇ python_vision_worker/ # ML worker (+ yolov8n.pt)
+Γö£ΓöÇΓöÇ attention-node/           # Attention Express + Attention Worker
+Γöé   Γö£ΓöÇΓöÇ src/
+Γöé   Γö£ΓöÇΓöÇ prisma/
+Γöé   ΓööΓöÇΓöÇ python_attention_worker/  # ML worker (+ face_landmarker.task)
+Γö£ΓöÇΓöÇ deploy/                   # Cloudflare Tunnel helpers only
+Γöé   Γö£ΓöÇΓöÇ CLOUDFLARE_TUNNEL.md
+Γöé   Γö£ΓöÇΓöÇ start-tunnel.ps1
+Γöé   ΓööΓöÇΓöÇ cloudflare/
+ΓööΓöÇΓöÇ MIGRATION_EXPRESS.md      # Migration notes
 ```
 
 ---
@@ -61,10 +62,10 @@ HIRELENS/
 | Frontend | React, Vite, Redux Toolkit, Tailwind, Axios, WebRTC |
 | Main API | Express.js, Prisma, JWT, Cloudinary, `ws` |
 | Attention API | Express.js, Prisma, JWT |
-| Vision ML | Python worker — OpenCV, DeepFace, Ultralytics YOLO, TensorFlow/PyTorch |
-| Attention ML | Python worker — MediaPipe, Resemblyzer, PyTorch |
+| Vision ML | Python worker ΓÇö OpenCV, DeepFace, Ultralytics YOLO, TensorFlow/PyTorch |
+| Attention ML | Python worker ΓÇö MediaPipe, Resemblyzer, PyTorch |
 | Database | PostgreSQL (Supabase) |
-| Tunnel | Cloudflare `cloudflared` → Main Express `:8000` |
+| Tunnel | Cloudflare `cloudflared` ΓåÆ Main Express `:8000` |
 
 Python is used **only** for ML workers (stdin/stdout NDJSON). No Python web framework serves HTTP in production.
 
@@ -183,7 +184,7 @@ Attention Express (`:8001`) is called by Main only (`/attention/analyze`, `/voic
 ## Deployment notes
 
 - Dockerfiles live under `backend-node/` and `attention-node/` (Node + Python worker in one image).
-- Cloudflare Tunnel helpers live under `deploy/` (tunnel → Main Express only).
+- Cloudflare Tunnel helpers live under `deploy/` (tunnel ΓåÆ Main Express only).
 - Historical FastAPI/Uvicorn docs in older markdown under `docs/` or `Interview_Preparation/` are **not** the active runtime.
 
 ---
@@ -199,3 +200,11 @@ Attention Express (`:8001`) is called by Main only (`/attention/analyze`, `/voic
 | WS fails through tunnel | Use `wss://` with `https://` tunnel URL |
 
 More tunnel detail: [`deploy/CLOUDFLARE_TUNNEL.md`](deploy/CLOUDFLARE_TUNNEL.md).
+
+---
+
+## License & links
+
+- **GitHub:** https://github.com/eryadavpraveen/HIRELENS
+- **Production app:** https://hirelens-puce-two.vercel.app
+- **Documentation:** https://drive.google.com/file/d/1Zm6oYHtleAHODCNt6UWASCwYfnQuCPUc/view?usp=sharing
