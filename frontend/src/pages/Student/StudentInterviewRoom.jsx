@@ -53,11 +53,11 @@ export default function StudentInterviewRoom() {
     setSessionEnded(true)
   }, [])
 
-  // Real-time peer connection (student role). Held back until verified so the
-  // camera is not acquired during the redirect.
+  // WebRTC + signaling start only after the student clicks "Start Interview".
+  // Pre-start lobby shows a local camera preview only (no peer connection).
   const { localStream, remoteStream, peerConnected, sendMessage, setVideoEnabled, setAudioEnabled } =
     useWebRTC({
-      interviewId: verified && !sessionEnded ? id : null,
+      interviewId: verified && started && !sessionEnded ? id : null,
       role: 'student',
       receiveMonitoring: false,
       onSessionEnd: handleSessionEnd,
@@ -239,19 +239,14 @@ export default function StudentInterviewRoom() {
             with {currentInterview.recruiter_name || 'your recruiter'}
           </p>
         </div>
-        <div className="w-full max-w-md space-y-3">
-          <VideoStream self stream={localStream} label="Camera Preview" />
-          <VideoStream
-            self={false}
-            stream={remoteStream}
-            muted={false}
-            label={currentInterview.recruiter_name || 'Recruiter'}
-            connected={peerConnected}
-          />
+        <div className="w-full max-w-md">
+          {/* Local preview only — peer audio/video starts on Start Interview */}
+          <VideoStream self label="Camera Preview" />
         </div>
         <p className="max-w-md text-sm text-muted-foreground">
-          This is a monitored interview. Please remain in fullscreen, keep your face visible,
-          and avoid switching tabs or using other devices.
+          This is a monitored interview. Click Start Interview to connect audio and video with
+          your recruiter. Remain in fullscreen, keep your face visible, and avoid switching tabs
+          or using other devices.
         </p>
         <Button size="lg" onClick={handleStart}>
           <Play className="h-5 w-5" />
