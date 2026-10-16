@@ -26,8 +26,8 @@
 
 6. Configure the frontend using that URL:
 	
-	VITE_API_BASE_URL=https://random-name.trycloudflare.com
-	VITE_WS_BASE_URL=wss://random-name.trycloudflare.com
-	VITE_USE_MOCK=false (already false)
+	API_BASE_URL=https://random-name.trycloudflare.com
+	WS_BASE_URL=wss://random-name.trycloudflare.com
+	USE_MOCK=false (already false)
 
 7. Redeploy Hirelens after update env variables.

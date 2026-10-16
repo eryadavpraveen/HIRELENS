@@ -169,15 +169,15 @@ report.validation.push(
 )
 
 // Frontend pointing
-const apiBase = feEnv.map.VITE_API_BASE_URL || ''
-const wsBase = feEnv.map.VITE_WS_BASE_URL || ''
+const apiBase = feEnv.map.API_BASE_URL || ''
+const wsBase = feEnv.map.WS_BASE_URL || ''
 report.validation.push(
   {
-    check: 'frontend VITE_API_BASE_URL points to :8000',
+    check: 'frontend API_BASE_URL points to :8000',
     result: apiBase.includes(':8000') ? 'PASS' : `WARN (${apiBase ? 'custom' : 'missing'})`,
   },
   {
-    check: 'frontend VITE_WS_BASE_URL points to :8000',
+    check: 'frontend WS_BASE_URL points to :8000',
     result: wsBase.includes(':8000') || wsBase.includes('ws://127.0.0.1:8000') ? 'PASS' : 'WARN',
   },
 )

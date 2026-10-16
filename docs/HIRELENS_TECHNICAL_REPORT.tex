@@ -434,7 +434,7 @@ Ops: \texttt{analyze}, \texttt{embed}, \texttt{ping}, \texttt{shutdown}.
 \end{table}
 
 \section{ICE Configuration}
-STUN: Google public STUN servers. Production across networks should configure TURN via \texttt{VITE\_TURN\_URLS}, \texttt{VITE\_TURN\_USERNAME}, \texttt{VITE\_TURN\_CREDENTIAL}.
+STUN: Google public STUN servers. Production across networks should configure TURN via \texttt{VITE\_TURN\_URLS}, \texttt{TURN\_USERNAME}, \texttt{VITE\_TURN\_CREDENTIAL}.
 
 \section{Local Media Controls}
 \texttt{MediaStreamTrack.enabled = false} mutes camera/mic without closing PeerConnection.
@@ -753,11 +753,11 @@ Let $c_i$ be deduplicated count for category $i$, $w_i$ its weight:
 
 \section{API Configuration}
 \begin{verbatim}
-VITE_API_BASE_URL=https://<main-express-or-tunnel>
-VITE_WS_BASE_URL=wss://<main-express-or-tunnel>
-VITE_USE_MOCK=false
+API_BASE_URL=https://<main-express-or-tunnel>
+WS_BASE_URL=wss://<main-express-or-tunnel>
+USE_MOCK=false
 \end{verbatim}
-\texttt{VITE\_ATTENTION\_SERVICE\_URL} may exist for legacy/local tooling; monitoring call sites use Main Express.
+\texttt{ATTENTION\_SERVICE\_URL} may exist for legacy/local tooling; monitoring call sites use Main Express.
 
 \section{Recruiter Interview Room Components}
 \texttt{VideoStream} (candidate + self), \texttt{ViolationTimeline}, \texttt{ViolationDashboard}, \texttt{IntegrityDashboard}, \texttt{MonitoringPanel}, \texttt{RecruiterInterviewControls} (camera/mic/end/report).
@@ -828,10 +828,10 @@ Quick tunnels issue ephemeral \texttt{*.trycloudflare.com} hostnames. REST uses 
 \texttt{CLOUDINARY\_CLOUD\_NAME/API\_KEY/API\_SECRET} & Verification uploads \\
 \texttt{CLOUDINARY\_FOLDER} & Default \texttt{hirelens\_images} \\
 \texttt{PYTHON\_PATH} & Worker venv Python executable \\
-\texttt{VITE\_API\_BASE\_URL} & Frontend REST base (Main Express) \\
-\texttt{VITE\_WS\_BASE\_URL} & WebSocket base (\texttt{wss} in prod) \\
-\texttt{VITE\_USE\_MOCK} & Must be \texttt{false} in production \\
-\texttt{VITE\_TURN\_*} & Optional TURN for cross-network WebRTC \\
+\texttt{API\_BASE\_URL} & Frontend REST base (Main Express) \\
+\texttt{WS\_BASE\_URL} & WebSocket base (\texttt{wss} in prod) \\
+\texttt{USE\_MOCK} & Must be \texttt{false} in production \\
+\texttt{TURN\_*} & Optional TURN for cross-network WebRTC \\
 \bottomrule
 \end{tabularx}
 \end{table}

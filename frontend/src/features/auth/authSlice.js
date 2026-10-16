@@ -32,7 +32,7 @@ export const loginUser = createAsyncThunk(
       else if (Array.isArray(detail)) message = detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
       else if (error.message === 'Network Error') {
         message =
-          'Cannot reach the API. Keep your PC backend and Cloudflare tunnel running, then check Vercel VITE_API_BASE_URL.'
+          'Cannot reach the API. Keep your PC backend and Cloudflare tunnel running, then check Vercel API_BASE_URL.'
       }
       return rejectWithValue(message)
     }

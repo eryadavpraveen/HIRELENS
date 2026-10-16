@@ -106,9 +106,9 @@ Background tunnel:
 After the quick tunnel prints a URL (or from `deploy/tunnel-api-err.log`):
 
 ```env
-VITE_API_BASE_URL=https://<tunnel-domain>
-VITE_WS_BASE_URL=wss://<tunnel-domain>
-VITE_USE_MOCK=false
+API_BASE_URL=https://<tunnel-domain>
+WS_BASE_URL=wss://<tunnel-domain>
+USE_MOCK=false
 ```
 
 Paths (unchanged):

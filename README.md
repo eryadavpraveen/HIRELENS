@@ -453,7 +453,7 @@ Optional `token` query, or first message `{ "type": "auth", "token": "<access_to
 | Server → client | `interview-completed` | Terminal state / teardown |
 | Server → client | `auth-error` | Auth failure |
 
-TURN/STUN for cross-network media is configured on the frontend via `VITE_TURN_*` (see `.env.example`).
+TURN/STUN for cross-network media is configured on the frontend via `TURN_*` (see `.env.example`).
 
 ---
 
@@ -541,12 +541,12 @@ Recruiters see live events, dashboards, and downloadable PDF reports (`pdfGenera
 | Area | Location |
 |------|----------|
 | Routes | `frontend/src/routes/AppRoutes.jsx` |
-| API client | `services/api.js` → `VITE_API_BASE_URL` |
-| WebRTC | `hooks/useWebRTC.js`, `services/webrtcService.js` → `VITE_WS_BASE_URL` |
+| API client | `services/api.js` → `API_BASE_URL` |
+| WebRTC | `hooks/useWebRTC.js`, `services/webrtcService.js` → `WS_BASE_URL` |
 | Monitoring | `hooks/useMonitoring.js`, `services/monitoringService.js` |
 | Auth state | `features/auth/authSlice.js` |
 | Integrity UI | `components/monitoring/*`, `utils/violations.js` |
-| Mock mode | `VITE_USE_MOCK=true` → `utils/mockData.js` |
+| Mock mode | `USE_MOCK=true` → `utils/mockData.js` |
 
 ### Key routes
 
@@ -563,11 +563,11 @@ Recruiters see live events, dashboards, and downloadable PDF reports (`pdfGenera
 ### API configuration
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_WS_BASE_URL=ws://127.0.0.1:8000
+API_BASE_URL=http://127.0.0.1:8000
+WS_BASE_URL=ws://127.0.0.1:8000
 ```
 
-`VITE_ATTENTION_SERVICE_URL` exists in `.env.example` / `constants.js` but **monitoring call sites use the Main API base** (attention/voice proxied). Prefer configuring only Main Express URLs in production.
+`ATTENTION_SERVICE_URL` exists in `.env.example` / `constants.js` but **monitoring call sites use the Main API base** (attention/voice proxied). Prefer configuring only Main Express URLs in production.
 
 ---
 
@@ -638,11 +638,11 @@ Never commit real `.env` files. Use the examples below as templates only.
 
 | Variable | Notes |
 |----------|-------|
-| `VITE_API_BASE_URL` | Main Express REST |
-| `VITE_WS_BASE_URL` | Main Express WebSocket (`ws://` or `wss://`) |
-| `VITE_USE_MOCK` | `false` for real API |
-| `VITE_ATTENTION_SERVICE_URL` | Optional / unused by monitoring call sites |
-| `VITE_TURN_URLS` / `VITE_TURN_USERNAME` / `VITE_TURN_CREDENTIAL` | WebRTC TURN |
+| `API_BASE_URL` | Main Express REST |
+| `WS_BASE_URL` | Main Express WebSocket (`ws://` or `wss://`) |
+| `USE_MOCK` | `false` for real API |
+| `ATTENTION_SERVICE_URL` | Optional / unused by monitoring call sites |
+| `TURN_URLS` / `TURN_USERNAME` / `TURN_CREDENTIAL` | WebRTC TURN |
 
 ---
 
@@ -708,9 +708,9 @@ npm run dev
 ```
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_WS_BASE_URL=ws://127.0.0.1:8000
-VITE_USE_MOCK=false
+API_BASE_URL=http://127.0.0.1:8000
+WS_BASE_URL=ws://127.0.0.1:8000
+USE_MOCK=false
 ```
 
 ---
@@ -741,8 +741,8 @@ Quick tunnels issue a temporary `https://*.trycloudflare.com` URL that **changes
 Frontend / Vercel after each new URL:
 
 ```env
-VITE_API_BASE_URL=https://<tunnel-domain>
-VITE_WS_BASE_URL=wss://<tunnel-domain>
+API_BASE_URL=https://<tunnel-domain>
+WS_BASE_URL=wss://<tunnel-domain>
 ```
 
 Details: [`deploy/CLOUDFLARE_TUNNEL.md`](deploy/CLOUDFLARE_TUNNEL.md).
@@ -768,7 +768,7 @@ Current repo deployment artifacts:
 - Shared `SECRET_KEY` across Main + Attention
 - `ATTENTION_SERVICE_URL` pointing at the Attention service URL
 - `CLOUDINARY_*` including `CLOUDINARY_FOLDER`
-- Frontend `VITE_API_BASE_URL` / `VITE_WS_BASE_URL`
+- Frontend `API_BASE_URL` / `WS_BASE_URL`
 
 ML images (Torch / TF / MediaPipe) are large — plan for sufficient **RAM and disk** on the host.
 
@@ -786,8 +786,8 @@ ML images (Torch / TF / MediaPipe) are large — plan for sufficient **RAM and d
 | PostgreSQL / Prisma errors | Valid `DATABASE_URL`; schema matches Prisma models |
 | Attention 503 from Main | Attention Express up on `:8001`; `ATTENTION_SERVICE_URL` correct; worker warmed |
 | Tunnel cannot reach origin | Main Express listening on `127.0.0.1:8000`; use IPv4 origin (not `localhost`→`::1`) |
-| WebSocket fails via tunnel | `VITE_WS_BASE_URL` must be `wss://` when API is `https://` |
-| WebRTC no video across networks | Configure `VITE_TURN_*`; allow camera/mic; prefer HTTPS page |
+| WebSocket fails via tunnel | `WS_BASE_URL` must be `wss://` when API is `https://` |
+| WebRTC no video across networks | Configure `TURN_*`; allow camera/mic; prefer HTTPS page |
 | CORS blocked | Add Vercel / tunnel frontend origin to `FRONTEND_URL` or `CORS_ORIGINS` |
 
 ---

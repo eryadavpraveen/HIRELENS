@@ -1,6 +1,6 @@
 /**
  * Mock data for HIRELENS frontend development.
- * Used when VITE_USE_MOCK !== 'false'. Mirrors the shape returned by the
+ * Used when USE_MOCK !== 'false'. Mirrors the shape returned by the
  * Express Main + Attention APIs so the UI can be demoed end-to-end.
  */
 

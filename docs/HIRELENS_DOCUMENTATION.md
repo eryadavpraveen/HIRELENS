@@ -424,7 +424,7 @@ Yellow → orange → red → purple by category (head/eye vs object/voice vs mu
 
 ### 12.3 Mock mode
 
-`VITE_USE_MOCK=true` (default in dev example) uses `mockData.js` instead of API. **Production must set `VITE_USE_MOCK=false`.**
+`USE_MOCK=true` (default in dev example) uses `mockData.js` instead of API. **Production must set `USE_MOCK=false`.**
 
 ---
 
@@ -476,14 +476,14 @@ Students use `GET /interviews/{id}/join-preview` **before** participant row exis
 
 Shares `DATABASE_URL`, `SECRET_KEY`, `ALGORITHM` via `backend/.env`.
 
-### 14.3 Frontend (build-time `VITE_*`)
+### 14.3 Frontend (build-time )
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_API_BASE_URL` | Backend REST base URL |
-| `VITE_ATTENTION_SERVICE_URL` | Attention service URL |
-| `VITE_WS_BASE_URL` | WebSocket base (same host as API) |
-| `VITE_USE_MOCK` | `false` for production |
+| `API_BASE_URL` | Backend REST base URL |
+| `ATTENTION_SERVICE_URL` | Attention service URL |
+| `WS_BASE_URL` | WebSocket base (same host as API) |
+| `USE_MOCK` | `false` for production |
 
 ---
 
@@ -515,10 +515,10 @@ npm run dev
 ### 15.3 Frontend env (`frontend/.env`)
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_ATTENTION_SERVICE_URL=http://localhost:8001
-VITE_WS_BASE_URL=ws://127.0.0.1:8000
-VITE_USE_MOCK=false
+API_BASE_URL=http://127.0.0.1:8000
+ATTENTION_SERVICE_URL=http://localhost:8001
+WS_BASE_URL=ws://127.0.0.1:8000
+USE_MOCK=false
 ```
 
 ---
@@ -550,7 +550,7 @@ See `frontend/.env.production.example` for Vercel variables.
 | Monitoring not on recruiter | `receiveMonitoring: true` on recruiter `useWebRTC` |
 | Attention `Aborted!` | Start from `attention_service/` cwd; lazy model init |
 | CORS errors | Set `FRONTEND_URL` + `CORS_ORIGINS` on backend/attention |
-| Login fails on Vercel | `VITE_API_BASE_URL` must point to live backend, not localhost |
+| Login fails on Vercel | `API_BASE_URL` must point to live backend, not localhost |
 
 ---
 
