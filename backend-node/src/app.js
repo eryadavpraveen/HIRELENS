@@ -20,7 +20,7 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }))
 
   app.get('/', (_req, res) => {
-    res.json({ message: 'InterviewAI Backend Running' })
+    res.json({ message: 'HIRELENS Backend Running' })
   })
 
   app.use('/auth', authRoutes)

@@ -1,5 +1,7 @@
 import { prisma } from '../db/prisma.js'
 
+// This file is the voiceprint storage and comparison service of your attention-node backend.
+
 export async function saveVoiceprint(candidateId, embedding) {
   await prisma.voiceprint.upsert({
     where: { candidateId },
@@ -33,7 +35,23 @@ export function cosineSimilarity(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
     throw new Error('Invalid embeddings for comparison')
   }
-  let sum = 0
-  for (let i = 0; i < a.length; i += 1) sum += Number(a[i]) * Number(b[i])
-  return sum
+
+  let dotProduct = 0
+  let magnitudeA = 0
+  let magnitudeB = 0
+
+  for (let i = 0; i < a.length; i += 1) {
+    const valueA = Number(a[i])
+    const valueB = Number(b[i])
+
+    dotProduct += valueA * valueB
+    magnitudeA += valueA * valueA
+    magnitudeB += valueB * valueB
+  }
+
+  if (magnitudeA === 0 || magnitudeB === 0) {
+    throw new Error('Cannot compare zero-magnitude embeddings')
+  }
+
+  return dotProduct / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB))
 }

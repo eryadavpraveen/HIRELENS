@@ -37,4 +37,13 @@ def generate_embedding(audio_path):
 
 
 def compare_embeddings(emb1, emb2):
-    return float(np.dot(emb1, emb2))
+    emb1 = np.asarray(emb1, dtype=np.float32)
+    emb2 = np.asarray(emb2, dtype=np.float32)
+
+    norm1 = np.linalg.norm(emb1)
+    norm2 = np.linalg.norm(emb2)
+
+    if norm1 == 0 or norm2 == 0:
+        raise ValueError("Cannot compare zero embeddings")
+
+    return float(np.dot(emb1, emb2) / (norm1 * norm2))

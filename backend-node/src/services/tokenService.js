@@ -11,6 +11,14 @@ function generateRefreshToken() {
 }
 
 export async function createRefreshTokenRecord(userId) {
+  // Delete all expired refresh tokens
+  await prisma.refreshToken.deleteMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+  })
   const plain = generateRefreshToken()
   const expiresAt = new Date(
     Date.now() + env.refreshTokenExpireDays * 24 * 60 * 60 * 1000,

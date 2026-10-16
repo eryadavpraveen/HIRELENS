@@ -9,6 +9,13 @@ function hashToken(token) {
 }
 
 async function createPasswordResetToken(userId) {
+  await prisma.passwordResetToken.deleteMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+  })
   const plain = crypto.randomBytes(48).toString('base64url')
   await prisma.passwordResetToken.create({
     data: {

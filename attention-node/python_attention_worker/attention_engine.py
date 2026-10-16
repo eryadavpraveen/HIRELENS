@@ -11,6 +11,7 @@ def analyze_attention(
 
     reasons = []
 
+
     # Head Movement
 
     if horizontal != "CENTER":
@@ -21,6 +22,7 @@ def analyze_attention(
             f"HEAD_{horizontal}"
         )
 
+
     if vertical != "CENTER":
 
         attention_loss = True
@@ -28,6 +30,7 @@ def analyze_attention(
         reasons.append(
             f"HEAD_{vertical}"
         )
+
 
     # Eye Movement
 
@@ -39,15 +42,17 @@ def analyze_attention(
             eye_direction
         )
 
-    # Eye Closure
+
+    # Both Eyes Closed
 
     if eyes_closed:
 
         drowsiness_alert = True
 
         reasons.append(
-            "EYES_CLOSED"
+            "BOTH_EYES_CLOSED"
         )
+
 
     return {
         "attention_loss":

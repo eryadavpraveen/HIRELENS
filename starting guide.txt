@@ -1,0 +1,33 @@
+1. First Update Database URL in backend [backend-node -> .env]
+	
+	check if project on supabase is resume or paused:
+		if paused then restart and copy connection pool string and paste to backend .env
+
+2. Start the attention service:
+		
+	cd D:\Desktop\HIRELENS\attention-node
+	npm start
+
+3. Start the main backend in another terminal:
+
+	cd D:\Desktop\HIRELENS\backend-node
+	npm start
+
+   - The main backend must run on 127.0.0.1:8000.
+
+4. Start the Cloudflare tunnel:
+
+	cd D:\Desktop\HIRELENS\backend-node
+	npm run tunnel
+
+5. Cloudflare will print a temporary URL like:
+
+	https://random-name.trycloudflare.com
+
+6. Configure the frontend using that URL:
+	
+	VITE_API_BASE_URL=https://random-name.trycloudflare.com
+	VITE_WS_BASE_URL=wss://random-name.trycloudflare.com
+	VITE_USE_MOCK=false (already false)
+
+7. Redeploy Hirelens after update env variables.

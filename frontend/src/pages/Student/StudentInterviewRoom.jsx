@@ -48,7 +48,7 @@ export default function StudentInterviewRoom() {
   const handleSessionEnd = useCallback((message) => {
     if (sessionEndRef.current) return
     sessionEndRef.current = true
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => { })
     setEndedMessage(message)
     setSessionEnded(true)
   }, [])
@@ -75,7 +75,7 @@ export default function StudentInterviewRoom() {
   useEffect(() => {
     dispatch(fetchInterviewById(id))
     dispatch(clearMonitoring())
-    dispatch(joinInterview(id)).unwrap().catch(() => {})
+    dispatch(joinInterview(id)).unwrap().catch(() => { })
   }, [dispatch, id])
 
   useEffect(() => {
@@ -121,7 +121,7 @@ export default function StudentInterviewRoom() {
         } catch {
           /* idempotent — interview may already be completed */
         }
-        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => { })
         setEndedMessage(
           'Interview terminated due to tab switching. The interview has been marked as completed.'
         )
@@ -182,11 +182,11 @@ export default function StudentInterviewRoom() {
 
   const handleStart = () => {
     setStarted(true)
-    requestFullscreen().catch(() => {})
+    requestFullscreen().catch(() => { })
   }
 
   const handleEnd = () => {
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => { })
     dispatch(clearMonitoring())
     navigate('/student/dashboard')
   }

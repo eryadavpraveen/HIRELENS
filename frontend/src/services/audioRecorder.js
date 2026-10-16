@@ -2,14 +2,9 @@ export async function recordAudio(
     duration = 5000
 ) {
 
-    const stream =
-        await navigator.mediaDevices
-            .getUserMedia({
-                audio: true
-            });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    const recorder =
-        new MediaRecorder(stream);
+    const recorder = new MediaRecorder(stream);
 
     const chunks = [];
 
@@ -19,38 +14,32 @@ export async function recordAudio(
     recorder.start();
 
     await new Promise(
-        resolve =>
-            setTimeout(
-                resolve,
-                duration
-            )
+        resolve => setTimeout(resolve, duration)
     );
 
     recorder.stop();
 
     return await new Promise(
         resolve => {
-
             recorder.onstop =
                 () => {
-
                     const blob =
                         new Blob(
                             chunks,
                             {
                                 type:
-                                "audio/webm"
+                                    "audio/webm"
                             }
                         );
 
                     resolve(blob);
 
                     stream
-                    .getTracks()
-                    .forEach(
-                        t =>
-                        t.stop()
-                    );
+                        .getTracks()
+                        .forEach(
+                            t =>
+                                t.stop()
+                        );
                 };
         }
     );
